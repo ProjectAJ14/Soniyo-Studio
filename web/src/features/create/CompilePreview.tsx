@@ -3,7 +3,7 @@ import { useEffect, useState, type Dispatch } from 'react'
 import { ApiError, api } from '../../api/client'
 import type { BuilderSpec, CompileResult } from '../../api/types'
 import { AsyncView } from '../../components/AsyncView'
-import { dataOf, useAsync } from '../../lib/async'
+import { dataOf, useAsync, type AsyncState } from '../../lib/async'
 import { formatDuration } from '../../lib/format'
 import { validateSpec, type SpecAction } from './specReducer'
 
@@ -64,12 +64,21 @@ function Result({ r }: { r: CompileResult }) {
   )
 }
 
-export function CompilePreview({ spec, dispatch }: { spec: BuilderSpec; dispatch: Dispatch<SpecAction> }) {
+export interface Compiled { state: AsyncState<CompileResult>; reload: () => void; invalid: string[] }
+
+/** Lives in CreateScreen so the phone Generate bar can show the caption status too. */
+// oxlint-disable-next-line react/only-export-components -- the hook feeds this component
+export function useCompile(spec: BuilderSpec): Compiled {
   const debounced = useDebounced(spec, 400)
   const invalid = Object.values(validateSpec(debounced))
   const [state, reload] = useAsync(() => invalid.length
     ? Promise.reject(new ApiError('api', 'validation_failed', invalid.join(' '), false)) // never sent
     : api.compile(debounced), [debounced])
+  return { state, reload, invalid }
+}
+
+export function CompilePreview({ spec, dispatch, compiled }: { spec: BuilderSpec; dispatch: Dispatch<SpecAction>; compiled: Compiled }) {
+  const { state, reload, invalid } = compiled
   const override = spec.engine.caption_override
   const expert = override !== null
   const setOverride = (caption_override: string | null) => dispatch({ type: 'patch', section: 'engine', patch: { caption_override } })

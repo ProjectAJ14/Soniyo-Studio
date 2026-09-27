@@ -5,10 +5,10 @@ import { api } from '../../api/client'
 import { emptySpec, type BuilderSpec } from '../../api/types'
 import { navigate } from '../../app/router'
 import { AsyncView } from '../../components/AsyncView'
-import { useAsync, useMutation } from '../../lib/async'
+import { dataOf, useAsync, useMutation } from '../../lib/async'
 import { takeDraft } from '../../lib/draft'
 import { formatDuration } from '../../lib/format'
-import { CompilePreview } from './CompilePreview'
+import { CompilePreview, useCompile } from './CompilePreview'
 import {
   AdvancedPanel, AmbiencePanel, AvoidPanel, InstrumentsPanel, LengthPanel, LyricsPanel, MusicPanel,
   PresetPanel, StylePanel, VocalsPanel,
@@ -38,6 +38,8 @@ export function CreateScreen() {
 
   const errors = validateSpec(spec)
   const invalid = Object.keys(errors).length > 0
+  const compiled = useCompile(spec)
+  const caption = dataOf(compiled.state)?.caption
 
   // Same client_job_id for retries of the same spec, so a retry after a lost response is idempotent.
   const submission = useRef<{ spec: BuilderSpec; id: string } | null>(null)
@@ -90,8 +92,13 @@ export function CreateScreen() {
             <h2>{spec.title.trim() || 'Untitled song'}</h2>
             <span className="label">{formatDuration(spec.length.total_seconds)} · {spec.vocals.type === 'none' ? 'instrumental' : `${spec.vocals.type} vocal`}</span>
           </div>
-          <CompilePreview spec={spec} dispatch={dispatch} />
+          <CompilePreview spec={spec} dispatch={dispatch} compiled={compiled} />
           <div className="stack rail__go">
+            {/* Phone only: the preview is far below, so the sticky bar carries a one-line caption. */}
+            <p className="rail__status mono" data-testid="go-status" aria-hidden>
+              {invalid ? 'Preview paused' : compiled.state.status === 'loading' ? 'Updating preview…'
+                : compiled.state.status === 'error' ? 'Preview unavailable' : caption || 'Empty caption'}
+            </p>
             <button type="button" className="btn btn--brand btn--block" onClick={onGenerate} disabled={invalid || submitting}>
               {submitting ? <Loader2 size={16} className="spin" aria-hidden /> : <Sparkles size={16} aria-hidden />}
               {submitting ? 'Sending…' : genError ? 'Try again' : 'Generate'}

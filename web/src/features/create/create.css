@@ -3,9 +3,21 @@
 .create__title, .rail__summary { gap: var(--space-1); }
 .create__rail { position: sticky; top: var(--space-4); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; }
 .create__builder .card + .card, .create__builder .stack > .card { margin-top: 0; }
+.rail__go { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.rail__status { display: none; }
 @media (max-width: 899px) {
-  .create { grid-template-columns: minmax(0, 1fr); }
+  .create { grid-template-columns: minmax(0, 1fr); padding-bottom: 120px; } /* room for the Generate bar */
   .create__rail { position: static; max-height: none; }
+  /* Generate stays reachable: a fixed bar above the player bar (and the tab bar on phones). */
+  .rail__go {
+    position: fixed; left: 0; right: 0; z-index: 14; bottom: var(--player-h, 0px);
+    gap: var(--space-2); padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: var(--bg); border-top: 1px solid var(--line-2);
+  }
+  .rail__status { display: block; margin: 0; font-size: var(--text-xs); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 720px) {
+  .rail__go { bottom: calc(60px + env(safe-area-inset-bottom) + var(--player-h, 0px)); padding-bottom: var(--space-3); }
 }
 
 .panel-head { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -38,4 +50,3 @@
 .params { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
 .params dd { margin: 0; color: var(--ink); font-size: 13px; }
 .plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); font-size: 13px; color: var(--dim); }
-.rail__go { border-top: 1px solid var(--line); padding-top: var(--space-4); }

@@ -9,13 +9,23 @@ function safeDownloadUrl(id: string): string | undefined {
   try { return api.audioUrl(id, 'mp3', true) } catch { return undefined } // unpaired: hide the link
 }
 
+/** Publishes the bar's height as --player-h so Create's phone Generate bar can sit above it. */
+function trackHeight(el: HTMLElement) {
+  const root = document.documentElement.style
+  const set = () => root.setProperty('--player-h', `${el.offsetHeight}px`)
+  set()
+  const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(set)
+  ro?.observe(el)
+  return () => { ro?.disconnect(); root.removeProperty('--player-h') }
+}
+
 export function PlayerBar() {
   const p = usePlayer()
   if (p.state === 'idle' || !p.song) return null
   const playing = p.state === 'playing' || p.state === 'loading'
   const download = safeDownloadUrl(p.song.id)
   return (
-    <section className="player" aria-label="Player">
+    <section className="player" aria-label="Player" ref={trackHeight}>
       <button type="button" className="btn btn--brand btn--icon" onClick={p.toggle}
         aria-label={playing ? 'Pause' : 'Play'}>
         {playing ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}

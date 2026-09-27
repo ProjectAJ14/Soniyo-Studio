@@ -71,6 +71,12 @@ describe('CreateScreen', () => {
     expect(await screen.findByText('Compiler exploded', {}, { timeout: 2000 })).toBeInTheDocument()
   })
 
+  it('the Generate bar carries a one-line caption status', async () => {
+    render(<CreateScreen />)
+    await screen.findByTestId('caption')
+    expect(screen.getByTestId('go-status')).toHaveTextContent('calm female vocal')
+  })
+
   it('Generate sends a client_job_id, disables while submitting, reuses the id on retry', async () => {
     const u = userEvent.setup()
     vi.mocked(api.createJob).mockRejectedValueOnce(new ApiError('unreachable', 'unreachable', 'down', true))
