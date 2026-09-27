@@ -52,7 +52,7 @@ async def test_submit_maps_params_and_auth() -> None:
     assert "time_signature" not in auto and "vocal_language" not in auto
 
     await e.submit(params(seed=42, bpm=60))
-    body = json.loads(seen[1].content)
+    body = json.loads(seen[-1].content)
     assert body["use_random_seed"] is False and body["seed"] == 42 and body["bpm"] == 60
 
 
