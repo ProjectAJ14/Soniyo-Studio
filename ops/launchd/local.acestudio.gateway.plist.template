@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: ops/bin/install.sh replaces __USER__ __HOME__ __REPO__ __CONFIG__ and installs to /Library/LaunchDaemons. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.acestudio.gateway</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__REPO__/ops/bin/run-gateway.sh</string>
+		<string>__CONFIG__/gateway.env</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__REPO__/gateway</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>StandardOutPath</key>
+	<string>__HOME__/Library/Logs/AceStudio/gateway.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/Library/Logs/AceStudio/gateway.err.log</string>
+</dict>
+</plist>
