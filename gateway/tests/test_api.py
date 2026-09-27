@@ -27,6 +27,7 @@ def test_health_bare_vs_authed(client: TestClient) -> None:
     full = client.get("/api/v1/health").json()
     assert full["engine"]["status"] in ("ok", "unknown")
     assert full["queue_depth"] == 0 and full["disk"]["free_bytes"] > 0
+    assert full["running_job_id"] is None and "last_error" in full["engine"]
 
 
 def test_cors_allow_and_deny(client: TestClient) -> None:
