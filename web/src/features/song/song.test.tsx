@@ -11,7 +11,8 @@ const api = vi.hoisted(() => ({
   audioUrl: (id: string, fmt = 'mp3', dl = false) => `http://mac/api/v1/songs/${id}/audio?format=${fmt}${dl ? '&download=1' : ''}`,
 }))
 vi.mock('../../api/client', async orig => ({ ...(await orig<typeof import('../../api/client')>()), api }))
-vi.mock('../player/PlayerProvider', () => ({ usePlayer: () => ({ play: vi.fn() }) }))
+const player = vi.hoisted(() => ({ play: vi.fn(), updateSong: vi.fn() }))
+vi.mock('../player/PlayerProvider', () => ({ usePlayer: () => player }))
 
 const song: Song = {
   id: 's1', job_id: 'j1', title: 'Om Namah Shivaya', created_at: '2026-09-27T10:00:00Z', duration_seconds: 185,
@@ -96,6 +97,18 @@ describe('song', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Title cannot be empty.')
     expect(api.patchSong).not.toHaveBeenCalled()
+  })
+
+  it('a successful rename updates the player bar title', async () => {
+    api.getSong.mockResolvedValue(song)
+    api.patchSong.mockResolvedValue({ ...song, title: 'Shiva dhyanam' })
+    render(<SongScreen id="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Shiva dhyanam' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })) })
+    expect(api.patchSong).toHaveBeenCalledWith('s1', { title: 'Shiva dhyanam' })
+    expect(player.updateSong).toHaveBeenCalledWith(expect.objectContaining({ id: 's1', title: 'Shiva dhyanam' }))
+    expect(screen.getByRole('heading', { name: 'Shiva dhyanam' })).toBeInTheDocument()
   })
 
   it('edit and regenerate hands the spec to Create', async () => {

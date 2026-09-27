@@ -38,7 +38,7 @@ function SongDetail({ song, onChange }: { song: Song; onChange: (s: Song) => voi
   return (
     <div className="stack">
       <a className="song__back" href={href({ name: 'library' })}><ArrowLeft size={16} aria-hidden /> Library</a>
-      <Title song={song} onChange={onChange} />
+      <Title song={song} onChange={s => { onChange(s); player.updateSong(s) }} />
       <div className="row song__meta">
         <Meta label="Created">{formatDate(song.created_at)}</Meta>
         <Meta label="Duration">{formatDuration(song.duration_seconds)}</Meta>

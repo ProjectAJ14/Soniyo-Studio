@@ -22,6 +22,8 @@ function Harness() {
     <>
       <span data-testid="state">{p.state}</span>
       <button onClick={() => p.play({ id: 's1', title: 'Om' })}>start</button>
+      <button onClick={() => p.updateSong({ id: 's1', title: 'Om renamed' })}>rename</button>
+      <button onClick={() => p.updateSong({ id: 's2', title: 'Other' })}>rename other</button>
       <PlayerBar />
     </>
   )
@@ -62,5 +64,16 @@ describe('player', () => {
     expect(loop).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(loop)
     expect(loop).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('updateSong retitles the loaded song only', async () => {
+    render(<PlayerProvider><Harness /></PlayerProvider>)
+    fireEvent.click(screen.getByText('start'))
+    await act(async () => {})
+    fireEvent.click(screen.getByText('rename other'))
+    expect(screen.getByRole('link', { name: 'Om' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('rename'))
+    expect(screen.getByRole('link', { name: 'Om renamed' })).toBeInTheDocument()
+    expect(state()).toBe('playing')
   })
 })
