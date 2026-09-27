@@ -154,10 +154,12 @@ Run on the Mac against the engine directly (the gateway is not needed). Load the
 set -a; source ~/AceStudio/config/engine.env; set +a
 E=http://127.0.0.1:8001
 H="Authorization: Bearer $ACESTEP_API_KEY"
-curl -fsS -H "$H" $E/health; echo
-curl -fsS -H "$H" $E/v1/models; echo
+curl -fsS $E/health; echo                       # open; ok even before models load
+curl -fsS -H "$H" $E/v1/model_inventory; echo   # not /v1/models: that is the OpenRouter route, always empty
 grep -iE 'tier|memory|gpu' ~/Library/Logs/AceStudio/engine*.log | tail   # detected memory tier
 ```
+
+Models load lazily on the first job (~75 s on an M4 Pro), so time runs after a warm-up job.
 
 Helper: submit, poll until done, print total seconds and the result JSON.
 
@@ -182,15 +184,16 @@ m0() {  # m0 <seconds> <thinking true|false> <caption> [lyrics] [lm_negative_pro
 }
 ```
 
-(`jq` ships with recent macOS; otherwise `brew install jq`.) Watch peak memory in a second SSH session:
-`while sleep 5; do ps -axo rss=,command= | grep -i acestep | grep -v grep | awk '{s+=$1} END {print s/1024 " MB"}'; done`.
+(`jq` ships with recent macOS; otherwise `brew install jq`.) Watch peak memory in a second SSH session
+(RSS misses the Metal allocations, so use the physical footprint):
+`while sleep 5; do footprint $(pgrep -f 'acestep-api --host' | tail -1) | sed -n 2p; done`.
 Fetch a result to listen to: `curl -fsS -H "$H" "$E/v1/audio?path=<path from result file>" -o run.flac`.
 
 Record every run (total time, peak memory, clamp warnings in `engine.err.log`) in the
 PRD decisions log.
 
-- [ ] **Engine serving with a key:** the `/health` call above returns ok; the same call
-      without `-H "$H"` is rejected.
+- [ ] **Engine serving with a key:** the `/v1/model_inventory` call above returns the
+      models; the same call without `-H "$H"` is rejected with 401 (`/health` is open by design).
 - [ ] **Scenario 1 with the LM:** `m0 60 true "<scenario 1 caption>" "<lyrics>"`, then
       `m0 300 …` and `m0 480 …`. For 480 s note whether the log shows a clamp.
 - [ ] **600 s through the LM text pass then LM off:**
@@ -231,6 +234,10 @@ PRD decisions log.
 - `tail -50 ~/Library/Logs/AceStudio/gateway.err.log`. Common: token under 32 chars,
   `uv` not on the plist `PATH`, port 8787 taken (`lsof -iTCP:8787 -sTCP:LISTEN`).
 
+**Job failed with "the engine log has the reason"**: the engine sends no error text
+with a failed task. `grep FAILED ~/Library/Logs/AceStudio/engine*.log | tail` shows
+`Job <id> FAILED: <reason>`.
+
 **Engine down** (`healthcheck.sh` exits 3, jobs fail with Retry):
 - `tail -100 ~/Library/Logs/AceStudio/engine.err.log` (out-of-memory, missing models,
   key mismatch). Keys must match: `grep -h ACESTEP_API_KEY ~/AceStudio/config/*.env | sort -u | wc -l` is 1.
@@ -244,4 +251,6 @@ PRD decisions log.
 - `df -h ~` and `du -sh ~/AceStudio/{audio,backups} ~/Library/Logs/AceStudio ~/.cache/huggingface 2>/dev/null`
 - Delete songs from the app, prune `~/AceStudio/backups`. Logs rotate automatically
   (step 13); force a rotation with `sudo newsyslog -F -f /etc/newsyslog.d/acestudio.conf`.
-- Old engine checkouts and model caches are the usual space hogs.
+- Old engine checkouts and model caches are the usual space hogs (the checkpoints are
+  ~11 GB). The engine also keeps every render in `~/AceStudio/ACE-Step-1.5/.cache/acestep/tmp/api_audio/`;
+  the gateway has its own copy, so these can be deleted.
