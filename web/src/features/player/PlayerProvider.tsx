@@ -17,6 +17,8 @@ export interface Player {
   toggle: () => void
   seek: (seconds: number) => void
   setLoop: (on: boolean) => void
+  /** Unload and hide the bar, e.g. when the playing song is deleted. */
+  stop: () => void
 }
 
 const PlayerContext = createContext<Player | null>(null)
@@ -84,6 +86,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setLoopState(on)
   }, [])
 
+  const stop = useCallback(() => {
+    const a = audio.current
+    if (a) { a.pause(); a.removeAttribute('src'); a.load() }
+    setSong(null)
+    setState('idle')
+  }, [])
+
   // Lock-screen / Control Center controls.
   useEffect(() => {
     const ms = typeof navigator !== 'undefined' ? navigator.mediaSession : undefined
@@ -106,8 +115,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [state])
 
   const value = useMemo<Player>(
-    () => ({ song, state, position, duration, loop, error, play, toggle, seek, setLoop }),
-    [song, state, position, duration, loop, error, play, toggle, seek, setLoop],
+    () => ({ song, state, position, duration, loop, error, play, toggle, seek, setLoop, stop }),
+    [song, state, position, duration, loop, error, play, toggle, seek, setLoop, stop],
   )
 
   return (

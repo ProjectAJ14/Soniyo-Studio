@@ -33,7 +33,7 @@ function SongDetail({ song, onChange }: { song: Song; onChange: (s: Song) => voi
   const player = usePlayer()
   const regen = useMutation(api.regenerateSong)
   const onRegen = async (seed: 'same' | 'new') => { if (await regen.mutate(song.id, seed)) navigate({ name: 'queue' }) }
-  const editAndRegenerate = () => { setDraft(song.spec); navigate({ name: 'create' }) }
+  const editAndRegenerate = () => { setDraft({ ...song.spec, title: song.title }); navigate({ name: 'create' }) }
 
   return (
     <div className="stack">
@@ -203,8 +203,13 @@ function ShareButton({ title }: { title: string }) {
 
 function DeleteButton({ song }: { song: Song }) {
   const [confirming, setConfirming] = useState(false)
+  const player = usePlayer()
   const del = useMutation((id: string) => api.deleteSong(id).then(() => true))
-  const onDelete = async () => { if (await del.mutate(song.id)) navigate({ name: 'library' }) }
+  const onDelete = async () => {
+    if (!(await del.mutate(song.id))) return
+    if (player.song?.id === song.id) player.stop()
+    navigate({ name: 'library' })
+  }
 
   if (!confirming) {
     return (
@@ -235,7 +240,7 @@ function Settings({ song }: { song: Song }) {
     s.vocals.type, s.vocals.delivery, s.vocals.language, s.vocals.character.join(', '), s.vocals.notes,
   ].filter(Boolean).join(' · ')
   const music = [
-    s.music.bpm ? `${s.music.bpm} BPM` : null, s.music.key, s.music.time_signature,
+    s.music.bpm ? `${s.music.bpm} BPM` : null, s.music.key, s.music.time_signature ? `${s.music.time_signature}/4` : null,
   ].filter(Boolean).join(' · ') || 'Auto'
   return (
     <section className="stack" aria-labelledby="song-settings">
