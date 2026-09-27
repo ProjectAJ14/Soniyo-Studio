@@ -30,9 +30,16 @@ export function setPairing(p: Pairing | null): void {
   listeners.forEach(l => l())
 }
 
-/** Same-origin default: when the gateway serves this app, its own origin is the API. */
-export function defaultBaseUrl(): string {
-  return import.meta.env.VITE_API_BASE ?? (location.protocol === 'https:' ? location.origin : '')
+const GATEWAY_PORT = '8787'
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** Prefill for the pairing form. Only when the gateway itself serves this app (Tailscale Serve
+ * on *.ts.net, or loopback on the gateway port) is its own origin the API; a Firebase or dev
+ * origin is not, so fall back to VITE_API_BASE or leave it empty for the placeholder. */
+export function defaultBaseUrl(loc: Pick<Location, 'hostname' | 'port' | 'origin'> = location): string {
+  const host = loc.hostname.toLowerCase()
+  if (host.endsWith('.ts.net') || (LOOPBACK.has(host) && loc.port === GATEWAY_PORT)) return loc.origin
+  return import.meta.env.VITE_API_BASE ?? ''
 }
 
 export function usePairing(): Pairing | null {

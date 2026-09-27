@@ -37,7 +37,7 @@ export function PairingScreen() {
         <label className="field">
           <span className="label">Gateway URL</span>
           <input className="input mono" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off"
-            spellCheck={false} placeholder="https://my-mac.tailnet.ts.net" value={url}
+            spellCheck={false} placeholder="https://<mac>.<tailnet>.ts.net" value={url}
             onChange={e => setUrl(e.target.value)} aria-invalid={urlError ? true : undefined}
             aria-describedby="pair-url-help" required />
           <span id="pair-url-help" className={urlError ? 'field__error' : 'field__help'}>
