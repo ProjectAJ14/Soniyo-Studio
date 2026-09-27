@@ -1,4 +1,4 @@
-"""Contract tests: AceStepEngine against recorded engine responses (fixtures/engine)."""
+"""Contract tests: AceStepEngine against real engine captures (fixtures/engine, README)."""
 
 import json
 from pathlib import Path
@@ -11,11 +11,15 @@ from soniyo_gateway.errors import ApiError
 from soniyo_gateway.schemas import EngineParams
 
 FIX = Path(__file__).parent / "fixtures" / "engine"
-TASK = "550e8400-e29b-41d4-a716-446655440000"
 
 
 def fixture(name: str) -> dict:
     return json.loads((FIX / f"{name}.json").read_text())
+
+
+TASK = fixture("release_task")["data"]["task_id"]
+AUDIO = ("/Users/owner/AceStudio/engine/ACE-Step-1.5/.cache/acestep/tmp/api_audio/"
+         "464d5cf2-8eb5-812b-548b-4f1e33eeb713.flac")  # fmt: skip
 
 
 def params(**kw) -> EngineParams:
@@ -63,17 +67,23 @@ async def test_submit_maps_params_and_auth() -> None:
 )  # fmt: skip
 async def test_query_status_mapping(name: str, status: str) -> None:
     seen: list[httpx.Request] = []
-    r = await engine({"/query_result": (200, fixture(name))}, seen).query(TASK)
-    assert json.loads(seen[0].content) == {"task_id_list": [TASK]}
+    body = fixture(name)
+    task = body["data"][0]["task_id"]
+    r = await engine({"/query_result": (200, body)}, seen).query(task)
+    assert json.loads(seen[0].content) == {"task_id_list": [task]}
     assert r.status == status
     if status == "succeeded":
-        assert r.audio_path == "/tmp/api_audio/abc123.flac" and r.seed == 12345
+        assert r.audio_path == AUDIO and r.seed == 1326605104
         assert r.info == {"dit": "acestep-v15-turbo", "lm": "acestep-5Hz-lm-0.6B"}
-    if status == "failed":
-        assert r.error == "CUDA out of memory"
+    if status == "failed":  # the real engine sends no reason; it is only in its log
+        assert r.error and "engine log" in r.error
 
 
 async def test_unknown_task_is_failed() -> None:
+    # the engine answers status 0 (running) with result "[]" for ids it does not know
+    unknown = fixture("query_result_unknown")
+    r = await engine({"/query_result": (200, unknown)}, []).query(unknown["data"][0]["task_id"])
+    assert r.status == "failed"
     r = await engine({"/query_result": (200, {"data": [], "code": 200})}, []).query(TASK)
     assert r.status == "failed"
 
@@ -81,12 +91,12 @@ async def test_unknown_task_is_failed() -> None:
 async def test_fetch_audio_and_health(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
     e = engine({"/v1/audio": (200, b"fLaC-bytes"), "/health": (200, fixture("health")),
-                "/v1/models": (200, fixture("models"))}, seen)  # fmt: skip
+                "/v1/model_inventory": (200, fixture("model_inventory"))}, seen)  # fmt: skip
     dest = tmp_path / "x.flac"
-    await e.fetch_audio("/tmp/api_audio/abc123.flac", dest)
+    await e.fetch_audio(AUDIO, dest)
     assert dest.read_bytes() == b"fLaC-bytes"
-    assert seen[0].url.params["path"] == "/tmp/api_audio/abc123.flac"
-    assert await e.health() == (True, ["acestep-v15-turbo", "acestep-v15-turbo-shift3"], None)
+    assert seen[0].url.params["path"] == AUDIO
+    assert await e.health() == (True, ["acestep-v15-turbo"], None)
 
 
 async def test_format_input() -> None:
@@ -97,8 +107,8 @@ async def test_format_input() -> None:
     body = json.loads(seen[0].content)
     assert json.loads(body["param_obj"]) == {"duration": 600, "language": "sa", "bpm": 60,
                                              "time_signature": "4"}  # fmt: skip
-    assert (f.caption, f.lyrics, f.bpm, f.key_scale) == (
-        "Enhanced music description", "Formatted lyrics...", 120, "C Major")  # fmt: skip
+    assert f.caption.startswith("A serene and meditative piece") and f.lyrics.startswith("[Intro")
+    assert (f.bpm, f.key_scale, f.time_signature, f.vocal_language) == (60, "D major", "4", "sa")
 
 
 async def test_errors_map_to_api_errors() -> None:
@@ -121,8 +131,12 @@ async def test_errors_map_to_api_errors() -> None:
 
 async def test_avg_job_seconds_from_stats() -> None:
     seen: list[httpx.Request] = []
-    assert await engine({"/v1/stats": (200, fixture("stats"))}, seen).avg_job_seconds() == 8.5
+    stats = fixture("stats")  # real capture: fresh engine, avg is its 5.0 default, not measured
+    assert await engine({"/v1/stats": (200, stats)}, seen).avg_job_seconds() is None
     assert seen[0].method == "GET"
+    stats["data"]["jobs"]["succeeded"] = 3
+    stats["data"]["avg_job_seconds"] = 37.5
+    assert await engine({"/v1/stats": (200, stats)}, []).avg_job_seconds() == 37.5
     assert await engine({"/v1/stats": (503, {})}, []).avg_job_seconds() is None
     empty = {"data": {"avg_job_seconds": 0}, "code": 200}
     assert await engine({"/v1/stats": (200, empty)}, []).avg_job_seconds() is None

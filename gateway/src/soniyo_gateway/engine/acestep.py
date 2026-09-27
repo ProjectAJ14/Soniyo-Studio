@@ -1,4 +1,5 @@
-"""ACE-Step 1.5 `acestep-api` adapter (docs/en/API.md upstream).
+"""ACE-Step 1.5 `acestep-api` adapter. Verified against the real engine (commit ca1e85f,
+fixtures/engine are captures from it).
 
 Every response is wrapped: {"data": ..., "code": 200, "error": null, "timestamp", "extra"}.
 Auth: `Authorization: Bearer ACESTEP_API_KEY`.
@@ -16,16 +17,20 @@ EngineParams -> POST /release_task (JSON):
 POST /query_result {"task_id_list": [id]} -> data[i] {task_id, status 0|1|2, result}
     result is a JSON *string* holding a list; first item gives
     file "/v1/audio?path=<p>" -> audio_path <p>, seed_value "123,456" -> seed 123,
-    dit_model / lm_model -> info. A task the engine no longer knows (e.g. after its
-    restart) is reported as failed.
+    dit_model / lm_model -> info. A failed item carries no error text (only the engine
+    log has it). A task the engine does not know (e.g. after its restart) comes back as
+    status 0 with result "[]" and is reported as failed, not polled until the deadline.
 
 GET /v1/audio?path=<p>              -> FLAC bytes
-GET /health data.status == "ok"     + GET /v1/models data.models[].name -> health()
+GET /health data.status == "ok"     + GET /v1/model_inventory data.models[].name -> health()
+    (/health is unauthenticated and says ok before the lazy model load; /v1/models is
+    shadowed by the OpenRouter route: {"object": "list", "data": []}, so it is not used)
 POST /format_input {prompt, lyrics, temperature, param_obj: JSON string of
     {duration, bpm, key, time_signature, language}} -> data {caption, lyrics, bpm,
     key_scale, time_signature, duration, vocal_language} -> Formatted
 
-GET /v1/stats data.avg_job_seconds  -> avg_job_seconds() (None on any failure or 0); the
+GET /v1/stats data.avg_job_seconds  -> avg_job_seconds() (None on any failure, 0, or before any
+    job succeeded: the engine then reports its configured default, 5.0, not a measurement); the
     watchdog caches it as the time-left prior until the gateway has its own history (jobs.py).
 """
 
@@ -91,7 +96,7 @@ class AceStepEngine:
         item = next(
             (d for d in data or [] if isinstance(d, dict) and d.get("task_id") == task_id), None
         )
-        if item is None:
+        if item is None or item.get("result") in ("[]", []):
             return EngineResult("failed", error="Engine no longer knows this task.")
         return parse_query_item(item)
 
@@ -121,7 +126,7 @@ class AceStepEngine:
             if not isinstance(data, dict) or data.get("status") != "ok":
                 log.warning("engine health says %.200r", data)
                 return False, [], "Engine health check did not report ok."
-            models = await self._call("GET", "/v1/models", wait=10.0)
+            models = await self._call("GET", "/v1/model_inventory", wait=10.0)
         except ApiError as e:
             return False, [], e.message
         names = [m["name"] for m in (models or {}).get("models", []) if "name" in m]
@@ -132,7 +137,9 @@ class AceStepEngine:
             data = await self._call("GET", "/v1/stats", wait=10.0)
         except ApiError:
             return None
-        avg = data.get("avg_job_seconds") if isinstance(data, dict) else None
+        if not isinstance(data, dict) or not (data.get("jobs") or {}).get("succeeded"):
+            return None
+        avg = data.get("avg_job_seconds")
         return float(avg) if isinstance(avg, int | float) and avg > 0 else None
 
     async def format_input(self, params: EngineParams) -> Formatted:
@@ -200,7 +207,8 @@ def parse_query_item(item: dict) -> EngineResult:
     if status == "running":
         return EngineResult("running")
     if status == "failed":
-        msg = item.get("error") or first.get("error") or "Engine reported the render failed."
+        msg = (item.get("error") or first.get("error")
+               or "Engine reported the render failed; the engine log has the reason.")  # fmt: skip
         return EngineResult("failed", error=str(msg))
     file_url = first.get("file") or ""
     path = parse_qs(urlparse(file_url).query).get("path", [""])[0] or None

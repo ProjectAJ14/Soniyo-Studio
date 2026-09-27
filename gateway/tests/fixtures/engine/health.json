@@ -1,1 +1,1 @@
-{"data": {"status": "ok", "service": "ACE-Step API", "version": "1.0"}, "code": 200, "error": null, "timestamp": 1700000000000, "extra": null}
+{"data":{"status":"ok","service":"ACE-Step API","version":"1.0","models_initialized":false,"llm_initialized":false,"loaded_model":"acestep-v15-turbo","loaded_lm_model":null},"code":200,"error":null,"timestamp":1790523041248,"extra":null}

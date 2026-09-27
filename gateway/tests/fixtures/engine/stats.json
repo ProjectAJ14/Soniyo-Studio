@@ -1,1 +1,1 @@
-{"data": {"jobs": {"total": 100, "queued": 5, "running": 1, "succeeded": 90, "failed": 4}, "queue_size": 5, "queue_maxsize": 200, "avg_job_seconds": 8.5}, "code": 200, "error": null, "timestamp": 1700000000000, "extra": null}
+{"data":{"jobs":{"total":0,"queued":0,"running":0,"succeeded":0,"failed":0},"queue_size":0,"queue_maxsize":200,"avg_job_seconds":5.0},"code":200,"error":null,"timestamp":1790523041261,"extra":null}
