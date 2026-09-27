@@ -10,7 +10,8 @@
 @import '@fontsource/jetbrains-mono/600.css';
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+button, a, summary, input, select, textarea { touch-action: manipulation; } /* no double-tap zoom delay */
 body {
   margin: 0;
   background: var(--bg);
@@ -55,16 +56,16 @@ a { color: var(--spot); }
   cursor: pointer; text-decoration: none;
   transition: background var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease), color var(--duration-base) var(--ease);
 }
-.btn:hover { background: var(--mass); }
 .btn:disabled { color: var(--faint-2); cursor: not-allowed; background: var(--panel); }
 .btn--brand { background: var(--spot); color: var(--spot-ink); }
-.btn--brand:hover { background: var(--spot); }
 .btn--brand:disabled { background: var(--mass); color: var(--faint-2); }
 .btn--ghost { background: transparent; border-color: var(--line-2); }
-.btn--ghost:hover { background: var(--panel); }
 .btn--danger { background: transparent; border-color: var(--line-2); color: var(--error); }
 .btn--icon { padding: 0; width: 44px; }
 .btn--sm { min-height: 44px; padding: 6px 12px; font-size: 13px; } /* compact look, full 44px target */
+.btn--lg { min-height: 56px; font-size: 17px; }
+/* Instant press feedback on touch, so a tap never feels ignored. */
+.btn:active:not(:disabled), .chip:active, .seg button:active, .tab:active { transform: translateY(1px); filter: brightness(.92); }
 
 /* Chips — toggles use aria-pressed */
 .chip {
@@ -75,12 +76,12 @@ a { color: var(--spot); }
   background: transparent; color: var(--dim); cursor: pointer;
   transition: all var(--duration-base) var(--ease);
 }
-.chip:hover { border-color: var(--spot); color: var(--spot); }
 .chip[aria-pressed='true'] { background: var(--spot-soft); border-color: var(--spot); color: var(--spot); }
 
 /* Segmented control: selected segment inverts */
 .seg { display: inline-flex; border: 1px solid var(--line-2); flex-wrap: wrap; }
 .seg button {
+  display: inline-flex; align-items: center; gap: 6px;
   min-height: 44px; padding: 6px 14px; border: 0; border-radius: 0;
   background: transparent; color: var(--dim); font: 500 13px var(--font-body); cursor: pointer;
 }
@@ -130,7 +131,12 @@ a { color: var(--spot); }
 
 /* App shell: tab bar on top (landscape) / bottom (portrait narrow) */
 .shell { min-height: 100dvh; display: flex; flex-direction: column; }
-.topbar { display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-6); border-bottom: 1px solid var(--line-2); min-height: 60px; }
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: env(safe-area-inset-top) calc(var(--space-6) + env(safe-area-inset-right)) 0 calc(var(--space-6) + env(safe-area-inset-left));
+  border-bottom: 1px solid var(--line-2); min-height: calc(60px + env(safe-area-inset-top)); background: var(--bg);
+}
 .brand { display: flex; align-items: center; gap: 10px; font: 900 19px var(--font-disp); letter-spacing: var(--tracking-snug); color: var(--ink); text-decoration: none; }
 .brand__tile { width: 30px; height: 30px; display: grid; place-items: center; background: var(--spot); color: var(--spot-ink); }
 .tabs { display: flex; gap: 0; margin-left: auto; }
@@ -139,7 +145,6 @@ a { color: var(--spot); }
   min-height: 60px; padding: 0 16px; color: var(--dim); text-decoration: none;
   font: 500 14px var(--font-body);
 }
-.tab:hover { color: var(--ink); }
 .tab[aria-current='page'] { color: var(--spot); }
 /* Indicator as a pseudo-element, so box-shadow stays free for the :focus-visible ring. */
 .tab[aria-current='page']::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spot); }
@@ -165,3 +170,14 @@ a { color: var(--spot); }
 .input[aria-invalid='true'] { border-color: var(--error); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Hover styles only for real pointers: on iPad a tapped control would otherwise stay "hovered". */
+@media (hover: hover) {
+  .btn:hover { background: var(--mass); }
+  .btn--brand:hover { background: var(--spot); }
+  .btn--ghost:hover { background: var(--panel); }
+  .btn:disabled:hover { background: var(--panel); }
+  .btn--brand:disabled:hover { background: var(--mass); }
+  .chip:hover { border-color: var(--spot); color: var(--spot); }
+  .tab:hover { color: var(--ink); }
+}
