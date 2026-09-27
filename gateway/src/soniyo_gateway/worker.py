@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import audio
+from . import audio, jobs
 from .compiler import compile_spec
 from .config import Settings
 from .db import now
@@ -21,6 +21,7 @@ from .schemas import EngineParams, ErrorBody, Song
 
 log = logging.getLogger(__name__)
 ACTIVE = ("queued", "compiling", "generating", "unit_ready", "looping", "encoding")
+MIN_RENDER_SECONDS = 600.0  # _poll gives up after max(this, 4x the expected render time)
 
 
 @dataclass
@@ -45,11 +46,20 @@ class Runtime:
 # ---- recovery -----------------------------------------------------------------------------
 
 
-def recover(repo: Repo) -> list[str]:
-    """Requeue compiling/encoding; keep generating-with-task for re-polling; fail the rest.
-    Returns the job ids whose engine task should be re-polled."""
+def recover(repo: Repo, audio_dir: Path) -> list[str]:
+    """Requeue compiling (and encoding without a task); re-poll generating/encoding jobs that
+    have an engine task, so finished audio is fetched, not re-rendered; fail the rest; delete
+    audio files no song owns (a crashed attempt's leftovers). Returns the ids to re-poll."""
     for d in repo.jobs_in_states(["compiling", "encoding"]):
-        repo.update_job(d["id"], state="queued", started_at=None)
+        if d["state"] == "encoding" and d["engine_task_id"]:
+            repo.update_job(d["id"], state="generating")
+        else:
+            repo.update_job(d["id"], state="queued", started_at=None)
+    owned = repo.song_file_names()
+    for f in audio_dir.glob("*") if audio_dir.is_dir() else ():
+        if f.is_file() and f.name not in owned:
+            log.warning("removing orphaned audio file %s", f.name)
+            f.unlink(missing_ok=True)
     resume = []
     for d in repo.jobs_in_states(["generating", "unit_ready", "looping"]):
         if d["state"] == "generating" and d["engine_task_id"]:
@@ -66,19 +76,32 @@ def recover(repo: Repo) -> list[str]:
 
 async def run(rt: Runtime, resume: list[str]) -> None:
     for job_id in resume:
-        d = rt.repo.get_job(job_id)
-        if d and d["state"] == "generating":
-            await _run_one(rt, job_id, resume_task=d["engine_task_id"])
+        try:
+            d = rt.repo.get_job(job_id)
+            if d and d["state"] == "generating":
+                await _run_one(rt, job_id, resume_task=d["engine_task_id"])
+        except Exception:
+            log.exception("worker resume failed job=%s", job_id)
     wake = rt.repo.hub.wake
     while True:
-        wake.clear()
-        ids = rt.repo.queued_ids() if rt.health.status != "down" else []
-        if not ids:
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(wake.wait(), 1.0)
-            continue
-        if rt.repo.update_job(ids[0], only_from=("queued",), state="compiling", started_at=now()):
-            await _run_one(rt, ids[0])
+        try:
+            await _next(rt, wake)
+        except Exception:  # e.g. the DB fails inside a job's error handler: keep consuming
+            log.exception("worker iteration failed")
+            await asyncio.sleep(1)
+
+
+async def _next(rt: Runtime, wake: asyncio.Event) -> None:
+    wake.clear()
+    # Only a confirmed-healthy engine takes work: "unknown" at boot while models load, and
+    # "ok"->"down" in progress, would fail the job. The watchdog wakes us when it turns ok.
+    ids = rt.repo.queued_ids() if rt.health.status == "ok" else []
+    if not ids:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(wake.wait(), 1.0)
+        return
+    if rt.repo.update_job(ids[0], only_from=("queued",), state="compiling", started_at=now()):
+        await _run_one(rt, ids[0])
 
 
 async def _run_one(rt: Runtime, job_id: str, resume_task: str | None = None) -> None:
@@ -102,6 +125,7 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
     assert job is not None
     spec, timings = job["spec"], dict(job["timings"])
     files: list[Path] = []
+    task_id = resume_task
     try:
         if resume_task is None:
             t = time.monotonic()
@@ -128,19 +152,23 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
             task_id = await engine.submit(params)
             repo.update_job(job_id, compiled=compiled, engine_task_id=task_id)
         else:
-            task_id, compiled, t = resume_task, job["compiled"], time.monotonic()
+            compiled, t = job["compiled"], time.monotonic()
             params = compiled.params
 
-        result = await _poll(rt, task_id)
+        factor = repo.generate_seconds_per_audio_second() or jobs.DEFAULT_FACTOR
+        budget = max(MIN_RENDER_SECONDS, 4 * factor * spec.length.total_seconds)
+        result = await _poll(rt, task_id, time.monotonic() + budget)
         if result.status == "failed":
             raise ApiError("internal", f"The engine could not render this song: {result.error}")
+        if not result.audio_path:
+            raise ApiError("internal", "The engine finished but returned no audio file.", False)
         timings["generate"] = round(time.monotonic() - t, 3)
 
         song_id = uuid.uuid4().hex
         s.audio_dir.mkdir(parents=True, exist_ok=True)
         flac, mp3 = s.audio_dir / f"{song_id}.flac", s.audio_dir / f"{song_id}.mp3"
         files += [flac, mp3]
-        await engine.fetch_audio(result.audio_path or "", flac)
+        await engine.fetch_audio(result.audio_path, flac)
         repo.update_job(job_id, state="encoding", timings=timings)
 
         t = time.monotonic()
@@ -158,17 +186,21 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
             engine_info=result.info or {"dit": s.dit_model, "lm": s.lm_model},
             size_bytes=flac.stat().st_size + mp3.stat().st_size,
         )  # fmt: skip
-        repo.insert_song(song, str(flac), str(mp3))
+        repo.finish_job(job_id, song, str(flac), str(mp3), timings)  # one transaction
         files = []  # the library owns them now
-        repo.update_job(job_id, state="succeeded", song_id=song_id, finished_at=now(),
-                        timings=timings)  # fmt: skip
         log.info("job succeeded job=%s song=%s timings=%s", job_id, song_id, timings)
     except asyncio.CancelledError:
         if rt.abort is None:
             raise  # shutdown: leave the state for recovery
         _fail(repo, job_id, timings, rt.abort)
     except ApiError as e:
-        _fail(repo, job_id, timings, e)
+        if e.code == "engine_unavailable" and task_id is None:
+            # The engine never took it: back to the front of the queue, not failed (F18).
+            log.warning("engine unavailable before submit, requeued job=%s: %s", job_id, e.message)
+            repo.update_job(job_id, only_from=ACTIVE, state="queued", started_at=None)
+            await asyncio.sleep(rt.settings.engine_poll_seconds)  # no hot loop if it stays down
+        else:
+            _fail(repo, job_id, timings, e)
     except Exception:
         log.exception("job crashed job=%s", job_id)
         _fail(repo, job_id, timings, ApiError("internal", "The gateway hit an unexpected error."))
@@ -179,13 +211,15 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
 
 def _fail(repo: Repo, job_id: str, timings: dict, e: ApiError) -> None:
     log.warning("job failed job=%s code=%s msg=%s", job_id, e.code, e.message)
-    err = ErrorBody(code=e.code, message=e.message, retryable=True)
+    err = ErrorBody(code=e.code, message=e.message, retryable=e.retryable)
     repo.update_job(job_id, only_from=ACTIVE, state="failed", error=err, finished_at=now(),
                     timings=timings)  # fmt: skip
 
 
-async def _poll(rt: Runtime, task_id: str) -> EngineResult:
+async def _poll(rt: Runtime, task_id: str, deadline: float) -> EngineResult:
     while True:
+        if time.monotonic() > deadline:
+            raise ApiError("engine_unavailable", "The engine took too long; retry this job.")
         try:
             r = await rt.engine.query(task_id)
         except ApiError as e:

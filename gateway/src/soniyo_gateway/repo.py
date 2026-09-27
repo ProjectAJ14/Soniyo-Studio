@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import threading
+from pathlib import Path
 from typing import Any
 
 from .db import now
@@ -141,8 +142,31 @@ class Repo:
 
     # ---- songs ------------------------------------------------------------------------
 
-    def insert_song(self, song: Song, flac_path: str, mp3_path: str) -> None:
-        self._execute(
+    def finish_job(self, job_id: str, song: Song, flac_path: str, mp3_path: str,
+                   timings: dict) -> None:  # fmt: skip
+        """Insert the song and mark its job succeeded atomically, so a crash can never leave
+        a song whose job recovery would render again."""
+        with self._lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._insert_song(song, flac_path, mp3_path)
+                self.conn.execute(
+                    "UPDATE jobs SET state = 'succeeded', song_id = ?, finished_at = ?,"
+                    " timings = ? WHERE id = ?",
+                    (song.id, now(), json.dumps(timings), job_id),
+                )
+                self.conn.execute("COMMIT")
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
+        self.hub.publish(job_id)
+
+    def song_file_names(self) -> set[str]:
+        rows = self._execute("SELECT flac_path, mp3_path FROM songs")
+        return {Path(p).name for r in rows for p in r if p}
+
+    def _insert_song(self, song: Song, flac_path: str, mp3_path: str) -> None:
+        self.conn.execute(
             "INSERT INTO songs(id, job_id, title, created_at, duration_seconds, favourite,"
             " preset_id, spec, compiled, seed, engine_info, flac_path, mp3_path, size_bytes)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

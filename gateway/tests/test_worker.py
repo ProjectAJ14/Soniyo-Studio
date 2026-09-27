@@ -5,8 +5,10 @@ from pathlib import Path
 
 from conftest import open_client, submit, wait_state
 
+from soniyo_gateway import jobs, worker
 from soniyo_gateway.config import Settings
 from soniyo_gateway.engine.fake import FakeEngine
+from soniyo_gateway.errors import ApiError
 
 
 def _insert(db: Path, job_id: str, state: str, task_id: str | None = None) -> None:
@@ -91,3 +93,82 @@ def test_engine_failure_marks_job_failed(settings: Settings, fake: FakeEngine) -
         assert "Fake engine forced failure" in job["error"]["message"]
         assert job["finished_at"] and job["song_id"] is None
     assert not list(settings.audio_dir.glob("*"))
+
+
+def test_queue_waits_for_engine_at_boot(settings: Settings, fake: FakeEngine) -> None:
+    fake.healthy = False  # launchd started both; the engine is still loading models
+    with open_client(settings, fake) as c:
+        job = submit(c, "boot")
+        time.sleep(0.4)  # well past several watchdog checks
+        assert c.get(f"/api/v1/jobs/{job['id']}").json()["state"] == "queued"
+        fake.healthy = True
+        wait_state(c, job["id"], "succeeded")
+
+
+def test_engine_unavailable_before_submit_requeues(
+    settings: Settings, fake: FakeEngine, monkeypatch
+) -> None:
+    real, calls = fake.submit, []
+
+    async def flaky(params):  # noqa: ANN001, ANN202
+        calls.append(1)
+        if len(calls) == 1:
+            raise ApiError("engine_unavailable", "busy")
+        return await real(params)
+
+    monkeypatch.setattr(fake, "submit", flaky)
+    with open_client(settings, fake) as c:
+        job = wait_state(c, submit(c, "flaky")["id"], "succeeded", "failed")
+        assert job["state"] == "succeeded" and len(calls) == 2
+
+
+def test_poll_deadline_fails_hung_render(settings: Settings, fake: FakeEngine, monkeypatch) -> None:
+    monkeypatch.setattr(worker, "MIN_RENDER_SECONDS", 0.3)
+    monkeypatch.setattr(jobs, "DEFAULT_FACTOR", 0.001)
+    fake.seconds = 60  # engine keeps answering "running"
+    with open_client(settings, fake) as c:
+        job = wait_state(c, submit(c, "hung")["id"], "failed")
+        assert job["error"]["code"] == "engine_unavailable" and job["error"]["retryable"]
+        fake.seconds = 0.2
+        wait_state(c, submit(c, "next")["id"], "succeeded")  # the queue moved on
+
+
+def test_worker_survives_repo_error(settings: Settings, fake: FakeEngine, monkeypatch) -> None:
+    real, calls = worker._fail, []
+
+    def broken_once(*a, **kw):  # noqa: ANN002, ANN003, ANN202
+        calls.append(1)
+        if len(calls) == 1:
+            raise sqlite3.OperationalError("disk I/O error")
+        return real(*a, **kw)
+
+    monkeypatch.setattr(worker, "_fail", broken_once)
+    fake.fail = True
+    with open_client(settings, fake) as c:
+        submit(c, "boom")
+        for _ in range(100):
+            if calls:
+                break
+            time.sleep(0.02)
+        fake.fail = False
+        wait_state(c, submit(c, "after")["id"], "succeeded", timeout=5)
+
+
+def test_recovery_refetches_encoding_and_removes_orphans(
+    settings: Settings, fake: FakeEngine
+) -> None:
+    fake.seconds = 30
+    with open_client(settings, fake) as c:
+        a = submit(c, "enc-task")
+        wait_state(c, a["id"], "generating")
+    conn = sqlite3.connect(settings.db_path)  # crashed after fetch, during encode
+    conn.execute("UPDATE jobs SET state = 'encoding' WHERE id = ?", (a["id"],))
+    conn.commit()
+    conn.close()
+    orphan = settings.audio_dir / "deadbeef.flac"
+    orphan.write_bytes(b"x")
+    fake.seconds = 0.2
+    with open_client(settings, fake) as c:
+        assert not orphan.exists()
+        assert wait_state(c, a["id"], "succeeded")["song_id"]
+    assert len(fake.submitted) == 1  # fetched, not re-rendered

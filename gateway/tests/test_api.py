@@ -1,6 +1,6 @@
 import json
-from concurrent.futures import ThreadPoolExecutor
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from conftest import ORIGIN, TOKEN, submit, wait_state

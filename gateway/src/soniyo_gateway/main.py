@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import logging.handlers
+import os
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -64,6 +65,17 @@ def build_engine(settings: Settings) -> Engine:
     raise SystemExit(f"SONIYO_ENGINE must be 'acestep' or 'fake', not {settings.engine!r}")
 
 
+def _die_if_crashed(task: asyncio.Task) -> None:
+    """The worker and watchdog only end by cancellation. If one dies anyway, exit so launchd
+    KeepAlive restarts the gateway and recover() repairs job states, instead of a gateway that
+    answers /health while nothing consumes the queue."""
+    if task.cancelled() or task.exception() is None:
+        return
+    log.critical("%s task died, exiting", task.get_name(), exc_info=task.exception())
+    logging.shutdown()
+    os._exit(1)
+
+
 def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
     engine = engine or build_engine(settings)
 
@@ -74,11 +86,13 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
         rt = worker.Runtime(settings=settings, repo=Repo(conn, Hub()), engine=engine)
         app.state.rt = rt
         library.seed_builtin_presets(rt.repo)
-        resume = worker.recover(rt.repo)
+        resume = worker.recover(rt.repo, settings.audio_dir)
         tasks = [
             asyncio.create_task(worker.run(rt, resume), name="worker"),
             asyncio.create_task(worker.watchdog(rt), name="watchdog"),
         ]
+        for t in tasks:
+            t.add_done_callback(_die_if_crashed)
         log.info("gateway started engine=%s data_dir=%s", settings.engine, settings.data_dir)
         try:
             yield
