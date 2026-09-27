@@ -118,6 +118,13 @@ class Repo:
         )
         return [r[0] for r in rows]
 
+    def unfinished_jobs(self) -> list[dict]:
+        """Non-terminal jobs: the running one(s) first, then the queue in order."""
+        return [_job(r) for r in self._execute(
+            "SELECT * FROM jobs WHERE state NOT IN ('succeeded', 'failed', 'cancelled')"
+            " ORDER BY state = 'queued', created_at, rowid"
+        )]  # fmt: skip
+
     def update_job(self, id: str, *, only_from: tuple[str, ...] = (), **fields: Any) -> bool:
         """Set fields; with only_from, only if the current state is one of them. Publishes."""
         cols = ", ".join(f"{k} = ?" for k in fields)

@@ -20,40 +20,54 @@ def title_for(spec: BuilderSpec) -> str:
     return spec.title.strip() or spec.style.strip()[:60] or "Untitled"
 
 
-def to_schema(repo: Repo, d: dict, *, queued: list[str] | None = None,
-              factor: float | None = None) -> Job:  # fmt: skip
-    state = d["state"]
-    if state in TERMINAL_STATES:
-        position = None
-    elif state == "queued":
-        queued = repo.queued_ids() if queued is None else queued
-        position = queued.index(d["id"]) + 1 if d["id"] in queued else None
-    else:
-        position = 0
-    elapsed = None
-    if d["started_at"]:
-        end = _ts(d["finished_at"]) if d["finished_at"] else datetime.now(UTC)
-        elapsed = max(0.0, (end - _ts(d["started_at"])).total_seconds())
-    estimate = None
-    if state not in TERMINAL_STATES:
-        if factor is None:
-            factor = repo.generate_seconds_per_audio_second() or DEFAULT_FACTOR
-        estimate = max(0.0, factor * d["spec"].length.total_seconds - (elapsed or 0.0))
-    return Job(**d, position=position, elapsed_seconds=elapsed, estimate_seconds_left=estimate)
+def factor(repo: Repo) -> float:
+    """Generate seconds per second of audio: from succeeded-job history, else 1."""
+    return repo.generate_seconds_per_audio_second() or DEFAULT_FACTOR
+
+
+def _elapsed(d: dict) -> float | None:
+    if not d["started_at"]:
+        return None
+    end = _ts(d["finished_at"]) if d["finished_at"] else datetime.now(UTC)
+    return max(0.0, (end - _ts(d["started_at"])).total_seconds())
+
+
+def queue_view(repo: Repo) -> dict[str, tuple[int, float]]:
+    """id -> (position, estimate_seconds_left) for every unfinished job, in one query and one
+    pass: running first, then queued in order. A queued job waits for the running job's
+    remainder plus the render of every queued job ahead of it, then its own."""
+    f, out, pos, wait = factor(repo), {}, 0, 0.0
+    for d in repo.unfinished_jobs():
+        render = f * d["spec"].length.total_seconds
+        if d["state"] == "queued":
+            pos += 1
+            wait += render
+            out[d["id"]] = (pos, wait)
+        else:
+            left = max(0.0, render - (_elapsed(d) or 0.0))
+            wait += left
+            out[d["id"]] = (0, left)
+    return out
+
+
+def to_schema(d: dict, view: dict[str, tuple[int, float]]) -> Job:
+    position, estimate = view.get(d["id"], (None, None))
+    if d["state"] in TERMINAL_STATES:
+        position, estimate = None, None
+    return Job(**d, position=position, elapsed_seconds=_elapsed(d),
+               estimate_seconds_left=estimate)  # fmt: skip
 
 
 def get(repo: Repo, job_id: str) -> Job:
     d = repo.get_job(job_id)
     if d is None:
         raise ApiError("not_found", "No such job.")
-    return to_schema(repo, d)
+    return to_schema(d, queue_view(repo))
 
 
 def list_jobs(repo: Repo, states: list[str] | None, limit: int) -> list[Job]:
-    queued = repo.queued_ids()
-    factor = repo.generate_seconds_per_audio_second() or DEFAULT_FACTOR
-    rows = repo.list_jobs(states, limit)
-    return [to_schema(repo, d, queued=queued, factor=factor) for d in rows]
+    view = queue_view(repo)
+    return [to_schema(d, view) for d in repo.list_jobs(states, limit)]
 
 
 def create(repo: Repo, spec: BuilderSpec) -> tuple[Job, bool]:
@@ -63,7 +77,7 @@ def create(repo: Repo, spec: BuilderSpec) -> tuple[Job, bool]:
         raise ApiError("validation_failed", "client_job_id: required, at most 100 characters")
     existing = repo.get_job_by_client_id(cid)
     if existing:
-        return to_schema(repo, existing), False
+        return get(repo, existing["id"]), False
     job_id = uuid.uuid4().hex
     spec = spec.model_copy(update={"client_job_id": cid})
     try:
@@ -72,7 +86,7 @@ def create(repo: Repo, spec: BuilderSpec) -> tuple[Job, bool]:
         existing = repo.get_job_by_client_id(cid)
         if existing is None:
             raise
-        return to_schema(repo, existing), False
+        return get(repo, existing["id"]), False
     return get(repo, job_id), True
 
 

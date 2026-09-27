@@ -155,8 +155,7 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
             compiled, t = job["compiled"], time.monotonic()
             params = compiled.params
 
-        factor = repo.generate_seconds_per_audio_second() or jobs.DEFAULT_FACTOR
-        budget = max(MIN_RENDER_SECONDS, 4 * factor * spec.length.total_seconds)
+        budget = max(MIN_RENDER_SECONDS, 4 * jobs.factor(repo) * spec.length.total_seconds)
         result = await _poll(rt, task_id, time.monotonic() + budget)
         if result.status == "failed":
             raise ApiError("internal", f"The engine could not render this song: {result.error}")

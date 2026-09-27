@@ -115,6 +115,9 @@ omits them so the LM/engine decides (instrumental sends `vocal_language: "unknow
 ```
 
 `position`: 0 = running, 1.. = place in queue, null when terminal.
+`estimate_seconds_left`: running job = its own render estimate minus elapsed; queued job =
+the running job's remainder + the estimated render of every queued job ahead + its own
+(seconds of audio × the gateway's generate-seconds-per-audio-second factor). Null when terminal.
 Lifecycle: `queued → compiling → generating → encoding → succeeded`; any
 non-terminal → `failed`; `queued` → `cancelled`. `unit_ready`/`looping` are v1.1.
 
