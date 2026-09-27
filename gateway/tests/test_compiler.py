@@ -58,6 +58,11 @@ def test_lm_modes():
     )
     assert on_long.plan.lm_text_pass and not on_long.params.thinking
     assert "7:30 LM cap" in on_long.notes[0]
+    assert on_long.notes[0].startswith('LM "on" was overridden for the render')
+    auto_long = compile_spec(
+        BuilderSpec.model_validate({"length": {"total_seconds": 600}}), lm_cap_seconds=450
+    )
+    assert "overridden" not in auto_long.notes[0] and "7:30 LM cap" in auto_long.notes[0]
 
 
 def test_instrumental():

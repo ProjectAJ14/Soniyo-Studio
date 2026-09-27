@@ -126,9 +126,13 @@ def compile_spec(spec: BuilderSpec, *, lm_cap_seconds: int) -> CompileResult:
     split = eng.lm != "off" and total > lm_cap_seconds
     thinking = eng.lm != "off" and not split
     if split:
+        cap = _mmss(lm_cap_seconds)
         notes.append(
-            f"Above this Mac's {_mmss(lm_cap_seconds)} LM cap: lyrics and metadata are planned "
-            "first, then rendered with the LM off."
+            f"LM \"on\" was overridden for the render: above this Mac's {cap} LM cap, lyrics "
+            "and metadata are planned first, then rendered with the LM off."
+            if eng.lm == "on"
+            else f"Above this Mac's {cap} LM cap: lyrics and metadata are planned first, then "
+            "rendered with the LM off."
         )
     if spec.lyrics.repeat is not None:
         notes.append(REPEAT_NOTE)
