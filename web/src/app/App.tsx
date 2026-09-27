@@ -1,4 +1,4 @@
-import { Library, ListMusic, Server, Sparkles } from 'lucide-react'
+import { Library, ListMusic, Music, Server, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { usePairing } from '../lib/pairing'
 import { href, useRoute, type Route } from './router'
@@ -39,7 +39,7 @@ function Shell() {
       <header className="topbar">
         <a className="brand" href={href({ name: 'create' })}>
           <span className="brand__tile" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+            <Music size={18} />
           </span>
           Soniyo
         </a>

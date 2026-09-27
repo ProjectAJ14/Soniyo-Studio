@@ -12,7 +12,7 @@
 .player__seek { flex-wrap: nowrap; gap: var(--space-2); }
 .player__time { font-size: 12px; color: var(--faint); min-width: 3.5em; }
 .player__time:last-child { text-align: right; }
-.player__range { flex: 1; min-height: 32px; accent-color: var(--spot); }
+.player__range { flex: 1; min-height: 44px; accent-color: var(--spot); }
 .player .btn[aria-pressed='true'] { color: var(--spot); border-color: var(--spot); background: var(--spot-soft); }
 
 @media (max-width: 720px) {

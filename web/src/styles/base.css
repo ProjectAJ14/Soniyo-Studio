@@ -64,12 +64,12 @@ a { color: var(--spot); }
 .btn--ghost:hover { background: var(--panel); }
 .btn--danger { background: transparent; border-color: var(--line-2); color: var(--error); }
 .btn--icon { padding: 0; width: 44px; }
-.btn--sm { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.btn--sm { min-height: 44px; padding: 6px 12px; font-size: 13px; } /* compact look, full 44px target */
 
 /* Chips — toggles use aria-pressed */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 36px; padding: 4px 12px;
+  min-height: 44px; padding: 4px 12px;
   font: 500 12.5px/1 var(--font-mono);
   border: 1px solid var(--line-2); border-radius: 0;
   background: transparent; color: var(--dim); cursor: pointer;
@@ -81,7 +81,7 @@ a { color: var(--spot); }
 /* Segmented control: selected segment inverts */
 .seg { display: inline-flex; border: 1px solid var(--line-2); flex-wrap: wrap; }
 .seg button {
-  min-height: 40px; padding: 6px 14px; border: 0; border-radius: 0;
+  min-height: 44px; padding: 6px 14px; border: 0; border-radius: 0;
   background: transparent; color: var(--dim); font: 500 13px var(--font-body); cursor: pointer;
 }
 .seg button + button { border-left: 1px solid var(--line-2); }
@@ -140,15 +140,18 @@ a { color: var(--spot); }
   font: 500 14px var(--font-body);
 }
 .tab:hover { color: var(--ink); }
-.tab[aria-current='page'] { color: var(--spot); box-shadow: inset 0 -2px 0 var(--spot); }
+.tab[aria-current='page'] { color: var(--spot); }
+/* Indicator as a pseudo-element, so box-shadow stays free for the :focus-visible ring. */
+.tab[aria-current='page']::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spot); }
 .tab__badge { min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; background: var(--spot); color: var(--spot-ink); font: 600 11px var(--font-mono); }
 .main { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding: var(--space-8) var(--space-6) 140px; }
 .page-head { display: flex; align-items: flex-end; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); }
 
 @media (max-width: 720px) {
-  .tab span.tab__text { display: none; }
+  /* Icon-only on phones, but the label stays the link's accessible name. */
+  .tab span.tab__text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .tabs { position: fixed; bottom: 0; left: 0; right: 0; justify-content: space-around; background: var(--bg); border-top: 1px solid var(--line-2); z-index: 20; padding-bottom: env(safe-area-inset-bottom); }
-  .tab[aria-current='page'] { box-shadow: inset 0 2px 0 var(--spot); }
+  .tab[aria-current='page']::after { top: 0; bottom: auto; }
   .main { padding: var(--space-6) var(--space-4) 180px; }
 }
 
