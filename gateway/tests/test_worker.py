@@ -68,7 +68,8 @@ def test_watchdog_fails_running_job_and_holds_queue(
         assert c.get(f"/api/v1/jobs/{queued['id']}").json()["state"] == "queued"
         fake.seconds, fake.healthy = 0.2, True
         wait_state(c, queued["id"], "succeeded")
-        assert c.get("/api/v1/health").json()["engine"]["status"] == "ok"
+        health = c.get("/api/v1/health").json()["engine"]
+        assert health["status"] == "ok" and health["last_error"] is None
 
 
 def test_lm_text_pass_then_lm_off_render(settings: Settings, fake: FakeEngine) -> None:
