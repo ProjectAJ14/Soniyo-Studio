@@ -1,11 +1,12 @@
 // Builder panels (F1–F8, F10–F12). Each panel reads the spec and dispatches reducer actions.
 import { useRef, useState, type Dispatch, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, GripVertical, Loader2, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ClipboardCopy, FilePlus2, GripVertical, Loader2, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../../api/client'
 import type { BuilderSpec, Catalog, Frequency, Level, Preset, Role, TimeSignature } from '../../api/types'
 import { FieldSeg } from '../../components/FieldSeg'
 import { useMutation } from '../../lib/async'
 import { formatDuration } from '../../lib/format'
+import { buildConfigPrompt, parseSpecReply } from './llmPrompt'
 import type { SpecAction, SpecErrors } from './specReducer'
 
 export interface PanelProps {
@@ -498,5 +499,81 @@ export function SavePresetPanel({ spec, loaded, onChanged }: {
         {op.state.status === 'success' && <p className="field__help" role="status">Saved.</p>}
       </div>
     </details>
+  )
+}
+
+/** Copy a prompt for any outside chat LLM, then paste its JSON reply back as a preset. */
+export function LlmPresetPanel({ catalog, onCreated }: { catalog: Catalog; onCreated: (s: BuilderSpec) => void }) {
+  const [idea, setIdea] = useState('')
+  const [reply, setReply] = useState('')
+  const [name, setName] = useState('')
+  const [copyNote, setCopyNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [shownPrompt, setShownPrompt] = useState<string | null>(null)
+  const create = useMutation(async () => {
+    const parsed = parseSpecReply(reply)
+    if ('error' in parsed) throw new Error(parsed.error)
+    const title = typeof parsed.spec.title === 'string' ? parsed.spec.title.trim() : ''
+    return api.createPreset((name.trim() || title || 'Imported preset').slice(0, 120), parsed.spec as BuilderSpec)
+  })
+  const busy = create.state.status === 'loading'
+
+  const copy = async () => {
+    const prompt = buildConfigPrompt(catalog, idea)
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setShownPrompt(null)
+      setCopyNote({ ok: true, text: 'Prompt copied. Paste it into ChatGPT, Claude or Gemini, then paste the JSON reply below.' })
+    } catch (e) {
+      // Clipboard can be refused (permissions, non-secure page): show the text to copy by hand.
+      setShownPrompt(prompt)
+      setCopyNote({ ok: false, text: `Copy failed (${(e as Error).message}). Select the prompt below and copy it.` })
+    }
+  }
+
+  const onCreate = async () => {
+    const p = await create.mutate()
+    if (p) {
+      onCreated({ ...p.spec, preset_id: p.id })
+      setReply('')
+      setName('')
+    }
+  }
+
+  return (
+    <Panel id="p-llm" label="AI assist" title="Preset from an AI chat">
+      <div className="field">
+        <label className="label" htmlFor="llm-idea">Describe the song (optional)</label>
+        <textarea id="llm-idea" className="textarea textarea--short" value={idea} maxLength={2000}
+          placeholder="A 5-minute joyful Krishna bhajan with harmonium and dholak" onChange={e => setIdea(e.target.value)} />
+      </div>
+      <div className="row">
+        <button type="button" className="btn btn--ghost" onClick={() => void copy()}>
+          <ClipboardCopy size={16} aria-hidden /> Copy configuration prompt
+        </button>
+      </div>
+      {copyNote && <p className={copyNote.ok ? 'field__help' : 'field__error'} role="status">{copyNote.text}</p>}
+      {shownPrompt && (
+        <textarea className="textarea mono" aria-label="Configuration prompt" readOnly value={shownPrompt}
+          onFocus={e => e.currentTarget.select()} />
+      )}
+      <div className="field">
+        <label className="label" htmlFor="llm-reply">Paste the JSON reply</label>
+        <textarea id="llm-reply" className="textarea mono" value={reply} placeholder='{ "title": "…", … }'
+          onChange={e => setReply(e.target.value)} />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor="llm-name">Preset name (optional, defaults to the title)</label>
+        <div className="row row--nowrap">
+          <input id="llm-name" className="input" value={name} maxLength={120} onChange={e => setName(e.target.value)} />
+          <button type="button" className="btn btn--ghost" disabled={!reply.trim() || busy} onClick={() => void onCreate()}>
+            <FilePlus2 size={16} aria-hidden /> {busy ? 'Creating…' : 'Create preset'}
+          </button>
+        </div>
+      </div>
+      {create.state.status === 'error' && <p className="field__error" role="alert">{create.state.error.message}</p>}
+      {create.state.status === 'success' && (
+        <p className="field__help" role="status">Preset “{create.state.data.name}” saved and loaded. Review it, then Generate.</p>
+      )}
+    </Panel>
   )
 }

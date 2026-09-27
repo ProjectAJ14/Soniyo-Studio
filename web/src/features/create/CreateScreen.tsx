@@ -11,7 +11,7 @@ import { takeDraft } from '../../lib/draft'
 import { formatDuration } from '../../lib/format'
 import { CompilePreview, useCompile } from './CompilePreview'
 import {
-  AdvancedPanel, AmbiencePanel, AvoidPanel, InstrumentsPanel, LengthPanel, LyricsPanel, MusicPanel,
+  AdvancedPanel, AmbiencePanel, AvoidPanel, InstrumentsPanel, LengthPanel, LlmPresetPanel, LyricsPanel, MusicPanel,
   PresetPicker, SavePresetPanel, StylePanel, VocalsPanel,
 } from './panels'
 import { useConnection } from '../server/connection'
@@ -105,7 +105,9 @@ export function CreateScreen({ active = true }: { active?: boolean }) {
           <AsyncView state={catalog} onRetry={reloadCatalog} label="song options">
             {c => {
               const props = { spec, dispatch, catalog: c, errors }
-              return mode === 'preset' ? (
+              // Outside the formKey remount, so its text and status survive the load it triggers.
+              const ai = <LlmPresetPanel catalog={c} onCreated={s => { load(s); reloadPresets() }} />
+              return <>{ai}{mode === 'preset' ? (
                 <div className="stack" key={formKey}>
                   <section className="card stack" aria-labelledby="p-quick">
                     <div className="panel-head">
@@ -146,7 +148,7 @@ export function CreateScreen({ active = true }: { active?: boolean }) {
                   </details>
                   <AdvancedPanel {...props} />
                 </div>
-              )
+              )}</>
             }}
           </AsyncView>
         </div>

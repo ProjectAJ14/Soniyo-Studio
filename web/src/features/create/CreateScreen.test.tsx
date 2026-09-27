@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '../../api/client'
-import { emptySpec, type Catalog, type CompileResult, type Job } from '../../api/types'
+import { emptySpec, type Catalog, type CompileResult, type Job, type Preset } from '../../api/types'
 
 vi.mock('../../api/client', async orig => {
   const mod = await orig<typeof import('../../api/client')>()
   return {
     ...mod,
-    api: { catalog: vi.fn(), compile: vi.fn(), createJob: vi.fn(), listPresets: vi.fn() },
+    api: { catalog: vi.fn(), compile: vi.fn(), createJob: vi.fn(), listPresets: vi.fn(), createPreset: vi.fn() },
   }
 })
 
@@ -141,5 +141,38 @@ describe('CreateScreen', () => {
     await userEvent.type(await screen.findByLabelText('BPM'), '400')
     expect(screen.getAllByText(/BPM must be/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled()
+  })
+
+  it('copies a configuration prompt and turns a pasted LLM reply into a loaded preset', async () => {
+    const u = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    render(<CreateScreen />)
+    await u.type(await screen.findByLabelText(/Describe the song/), 'Shiva night chant')
+    await u.click(screen.getByRole('button', { name: 'Copy configuration prompt' }))
+    const prompt = writeText.mock.calls[0][0]
+    expect(prompt).toContain('tanpura: drone')
+    expect(prompt).toContain('Shiva night chant')
+    expect(await screen.findByText(/Prompt copied/)).toBeInTheDocument()
+
+    const spec = { ...emptySpec(), title: 'Night chant' }
+    vi.mocked(api.createPreset).mockResolvedValue({ id: 'p1', name: 'Night chant', builtin: false, spec } as Preset)
+    const reply = 'Sure!\n```json\n{"title": "Night chant", "client_job_id": "x", "moods": ["calm"]}\n```'
+    await u.click(screen.getByLabelText('Paste the JSON reply'))
+    await u.paste(reply)
+    await u.click(screen.getByRole('button', { name: 'Create preset' }))
+    expect(api.createPreset).toHaveBeenCalledWith('Night chant', { title: 'Night chant', moods: ['calm'] })
+    expect(await screen.findByText(/saved and loaded/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Title')).toHaveValue('Night chant')
+    await waitFor(() => expect(api.listPresets).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows why a pasted reply is not JSON', async () => {
+    const u = userEvent.setup()
+    render(<CreateScreen />)
+    await u.click(await screen.findByLabelText('Paste the JSON reply'))
+    await u.paste('I cannot help with that')
+    await u.click(screen.getByRole('button', { name: 'Create preset' }))
+    expect(await screen.findByText(/No JSON object found/)).toBeInTheDocument()
+    expect(api.createPreset).not.toHaveBeenCalled()
   })
 })
