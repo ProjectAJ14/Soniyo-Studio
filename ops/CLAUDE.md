@@ -26,7 +26,7 @@ scripts that install, check, back up and update it. Procedure: `RUNBOOK.md`.
 ## Checks
 
 ```sh
-for f in ops/bin/*.sh; do shellcheck "$f" 2>/dev/null || bash -n "$f"; done
+if command -v shellcheck >/dev/null; then shellcheck ops/bin/*.sh; else for f in ops/bin/*.sh; do bash -n "$f"; done; fi
 ops/bin/install.sh --dry-run          # renders + plutil -lint every plist, prints sudo actions
 python3 -m json.tool firebase.json >/dev/null
 ```
