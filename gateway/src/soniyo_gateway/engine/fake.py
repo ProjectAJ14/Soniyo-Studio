@@ -19,6 +19,7 @@ class FakeEngine:
         self.work_dir = work_dir
         self.fail = fail  # next renders fail
         self.healthy = True
+        self.busy = False  # health times out, tasks keep running (a swapping engine)
         self.format_fails = False
         self.submitted: list[EngineParams] = []
         self._tasks: dict[str, tuple[float, EngineParams, bool]] = {}
@@ -56,6 +57,8 @@ class FakeEngine:
         await asyncio.to_thread(shutil.copyfile, path, dest)
 
     async def health(self) -> tuple[bool, list[str], str | None]:
+        if self.busy:
+            return False, [], "Engine unreachable: ReadTimeout"
         return (True, ["fake"], None) if self.healthy else (False, [], "Fake engine is down.")
 
     async def avg_job_seconds(self) -> float | None:

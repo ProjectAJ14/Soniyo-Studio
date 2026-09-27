@@ -72,6 +72,29 @@ def test_watchdog_fails_running_job_and_holds_queue(
         assert health["status"] == "ok" and health["last_error"] is None
 
 
+def test_watchdog_spares_busy_engine_until_grace_expires(
+    settings: Settings, fake: FakeEngine, tmp_path: Path
+) -> None:
+    marker = tmp_path / "restarted"
+    settings = dataclasses.replace(
+        settings, engine_restart_cmd=f"touch {marker}", health_busy_grace_seconds=0.6
+    )
+    fake.seconds = 30
+    with open_client(settings, fake) as c:
+        job = submit(c, "busy")
+        wait_state(c, job["id"], "generating")
+        fake.busy = True
+        time.sleep(0.3)  # many failed health checks, still inside the grace
+        assert not marker.exists()
+        assert c.get(f"/api/v1/jobs/{job['id']}").json()["state"] == "generating"
+        assert wait_state(c, job["id"], "failed")["error"]["code"] == "engine_unavailable"
+        for _ in range(100):  # the restart command runs right after the abort
+            if marker.exists():
+                break
+            time.sleep(0.02)
+        assert marker.exists()
+
+
 def test_lm_text_pass_then_lm_off_render(settings: Settings, fake: FakeEngine) -> None:
     settings = dataclasses.replace(settings, lm_cap_seconds=5)
     with open_client(settings, fake) as c:

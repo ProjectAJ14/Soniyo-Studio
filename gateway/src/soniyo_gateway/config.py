@@ -27,6 +27,7 @@ class Settings:
     low_disk_bytes: int = 10 * 1024**3
     health_fail_threshold: int = 3
     health_poll_seconds: float = 20.0
+    health_busy_grace_seconds: float = 900.0
     fake_seconds: float = 5.0
     engine_restart_cmd: str = ""
     log_dir: Path = field(default_factory=lambda: Path.home() / "Library" / "Logs" / "AceStudio")
@@ -65,6 +66,7 @@ class Settings:
             web_dist=Path(web_dist) if web_dist else None,
             fake_seconds=float(env.get("SONIYO_FAKE_SECONDS", "5")),
             engine_restart_cmd=env.get("SONIYO_ENGINE_RESTART_CMD", ""),
+            health_busy_grace_seconds=float(env.get("SONIYO_HEALTH_BUSY_GRACE_SECONDS", "900")),
             log_dir=Path(
                 env.get("SONIYO_LOG_DIR", str(Path.home() / "Library" / "Logs" / "AceStudio"))
             ).expanduser(),

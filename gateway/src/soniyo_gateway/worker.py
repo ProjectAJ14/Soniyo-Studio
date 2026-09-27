@@ -31,6 +31,7 @@ class EngineStatus:
     models: list[str] = field(default_factory=list)
     last_error: str | None = None
     failures: int = 0
+    busy_since: float | None = None  # first health timeout while a job was rendering
 
 
 @dataclass
@@ -259,9 +260,15 @@ async def watchdog(rt: Runtime) -> None:
                 log.info("engine healthy models=%s", models)
                 rt.repo.hub.wake.set()
             h.status, h.models, h.failures, h.last_error = "ok", models, 0, None
+            h.busy_since = None
             with contextlib.suppress(Exception):  # a prior only: never let it hurt the watchdog
                 if avg := await rt.engine.avg_job_seconds():
                     rt.repo.engine_factor = avg / jobs.STATS_REFERENCE_SECONDS
+        elif _busy(rt, err, h):
+            # A swapping engine mid-render stops answering /health but is still working:
+            # give it health_busy_grace_seconds before counting failures (M1 16 GB, Milestone 0).
+            h.last_error = err
+            log.info("engine busy, health timed out during a render: %s", err)
         else:
             h.failures += 1
             h.last_error = err
@@ -271,6 +278,15 @@ async def watchdog(rt: Runtime) -> None:
                 _abort_running(rt)
                 await _restart_engine(s.engine_restart_cmd)
         await asyncio.sleep(s.health_poll_seconds)
+
+
+def _busy(rt: Runtime, err: str | None, h: EngineStatus) -> bool:
+    rendering = rt.current is not None and not rt.current.done()
+    if not (rendering and err and "Timeout" in err):  # refused/down engines fail as before
+        h.busy_since = None
+        return False
+    h.busy_since = h.busy_since or time.monotonic()
+    return time.monotonic() - h.busy_since < rt.settings.health_busy_grace_seconds
 
 
 def _abort_running(rt: Runtime) -> None:
