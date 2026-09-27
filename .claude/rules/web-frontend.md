@@ -11,6 +11,6 @@ paths:
   the Tailscale banner, not "network error".
 - Styling: Eklavya design system — role tokens only (`--ink`, `--spot`, `--line`),
   square chrome, hairlines not shadows, Lucide icons, no emoji, sentence case.
-  `grep -nE '#[0-9a-fA-F]{3,8}\b|rgba?\(|--vd-' src --include=*.css --include=*.tsx`
+  `grep -rnE '#[0-9a-fA-F]{3,8}\b|rgba?\(|--vd-' src --include='*.css' --include='*.tsx'`
   must hit only `styles/tokens.css`.
 - Touch targets ≥ 44px, every control labelled, `:focus-visible` ring kept.
