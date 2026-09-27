@@ -58,9 +58,12 @@ def install(app: FastAPI) -> None:
             ApiError(code, str(exc.detail)).body(), status_code=exc.status_code
         )
 
-    @app.exception_handler(Exception)
-    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-        logging.getLogger(__name__).error(
-            "unhandled %s %s", request.method, request.url.path, exc_info=exc
-        )
-        return _json(ApiError("internal", "Unexpected gateway error. Check the gateway log."))
+
+
+def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    """Called from main's middleware, inside CORS, so browsers can read the 500 body.
+    (An `Exception` handler would run in Starlette's outermost layer, outside CORS.)"""
+    logging.getLogger(__name__).error(
+        "unhandled %s %s", request.method, request.url.path, exc_info=exc
+    )
+    return _json(ApiError("internal", "Unexpected gateway error. Check the gateway log."))

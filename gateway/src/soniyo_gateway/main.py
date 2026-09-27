@@ -92,6 +92,20 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
 
     app = FastAPI(title="Soniyo gateway", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)  # fmt: skip
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next):  # noqa: ANN001, ANN202
+        t = time.monotonic()
+        try:
+            response = await call_next(request)
+        except Exception as exc:  # noqa: BLE001 - becomes the standard internal error body
+            response = errors.unhandled(request, exc)
+        # path only: the query string may carry ?token=
+        log.info("%s %s %s %.0fms", request.method, request.url.path, response.status_code,
+                 (time.monotonic() - t) * 1000)  # fmt: skip
+        return response
+
+    # Added last = outermost, so error responses from the layer above also carry CORS headers.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -99,16 +113,6 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "Range"],
         expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     )
-
-    @app.middleware("http")
-    async def access_log(request: Request, call_next):  # noqa: ANN001, ANN202
-        t = time.monotonic()
-        response = await call_next(request)
-        # path only: the query string may carry ?token=
-        log.info("%s %s %s %.0fms", request.method, request.url.path, response.status_code,
-                 (time.monotonic() - t) * 1000)  # fmt: skip
-        return response
-
     errors.install(app)
     for r in (health, catalog, compile, jobs, songs, presets):
         app.include_router(r.router, prefix="/api/v1")
