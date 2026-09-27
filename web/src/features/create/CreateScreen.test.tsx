@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '../../api/client'
-import type { Catalog, CompileResult, Job } from '../../api/types'
+import { emptySpec, type Catalog, type CompileResult, type Job } from '../../api/types'
 
 vi.mock('../../api/client', async orig => {
   const mod = await orig<typeof import('../../api/client')>()
@@ -79,7 +79,7 @@ describe('CreateScreen', () => {
     render(<CreateScreen />)
     const btn = await screen.findByRole('button', { name: 'Generate' })
     expect(btn).toBeDisabled()
-    expect(screen.getByText(/Your Mac is unreachable. Keep building/)).toBeInTheDocument()
+    expect(screen.getByText(/Your Mac is unreachable. Keep editing/)).toBeInTheDocument()
     await userEvent.type(await screen.findByLabelText('Title'), 'Om')
     expect(screen.getByLabelText('Title')).toHaveValue('Om')
     await userEvent.click(btn)
@@ -120,6 +120,20 @@ describe('CreateScreen', () => {
     expect(screen.queryByRole('group', { name: 'Delivery' })).toBeNull()
     expect(screen.queryByLabelText('Language')).toBeNull()
     expect(screen.getByText(/Instrumental/)).toBeInTheDocument()
+  })
+
+  it('starts on Quick start when presets exist; picking one loads it and keeps your title', async () => {
+    const preset = { id: 'p1', name: 'Shiva drone', builtin: true, created_at: '', updated_at: '',
+      spec: { ...emptySpec(), title: 'Preset title', style: 'slow drone', length: { mode: 'single' as const, total_seconds: 300 } } }
+    vi.mocked(api.listPresets).mockResolvedValue({ items: [preset] })
+    render(<CreateScreen />)
+    await userEvent.type(await screen.findByLabelText('Title'), 'Mine')
+    await userEvent.click(await screen.findByRole('button', { name: /Shiva drone/ }))
+    expect(screen.getByRole('button', { name: /Shiva drone/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Title')).toHaveValue('Mine')
+    expect(screen.queryByLabelText('BPM')).toBeNull() // quick start hides the detail panels
+    await userEvent.click(screen.getByRole('button', { name: /Customize/ }))
+    expect(screen.getByLabelText('Style')).toHaveValue('slow drone')
   })
 
   it('blocks Generate on an out-of-range BPM', async () => {

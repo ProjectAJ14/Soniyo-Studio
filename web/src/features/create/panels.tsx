@@ -1,11 +1,10 @@
 // Builder panels (F1–F8, F10–F12). Each panel reads the spec and dispatches reducer actions.
 import { useRef, useState, type Dispatch, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, GripVertical, Plus, Save, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Loader2, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../../api/client'
-import type { BuilderSpec, Catalog, Frequency, Level, Role, TimeSignature } from '../../api/types'
-import { AsyncView } from '../../components/AsyncView'
+import type { BuilderSpec, Catalog, Frequency, Level, Preset, Role, TimeSignature } from '../../api/types'
 import { FieldSeg } from '../../components/FieldSeg'
-import { useAsync, useMutation } from '../../lib/async'
+import { useMutation } from '../../lib/async'
 import { formatDuration } from '../../lib/format'
 import type { SpecAction, SpecErrors } from './specReducer'
 
@@ -419,73 +418,85 @@ export function AdvancedPanel({ spec, dispatch, errors }: PanelProps) {
   )
 }
 
-export function PresetPanel({ spec, onLoad }: { spec: BuilderSpec; onLoad: (s: BuilderSpec) => void }) {
-  const [presets, reload] = useAsync(() => api.listPresets(), [])
-  const [selectedId, setSelectedId] = useState('')
+/** Quick start: tap a card to load its settings. */
+export function PresetPicker({ presets, selectedId, onPick }: {
+  presets: Preset[]; selectedId: string | null; onPick: (p: Preset) => void
+}) {
+  const builtin = presets.filter(p => p.builtin)
+  const mine = presets.filter(p => !p.builtin)
+  const group = (title: string, items: Preset[]) => items.length > 0 && (
+    <div className="field" role="group" aria-label={title}>
+      <span className="label" aria-hidden>{title}</span>
+      <div className="preset-grid">
+        {items.map(p => (
+          <button key={p.id} type="button" className="preset" aria-pressed={p.id === selectedId} onClick={() => onPick(p)}>
+            <span className="preset__name">{p.name}</span>
+            {p.spec.style && <span className="preset__style">{p.spec.style}</span>}
+            <span className="label">
+              {formatDuration(p.spec.length.total_seconds)} · {p.spec.vocals.type === 'none' ? 'instrumental' : `${p.spec.vocals.type} vocal`}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <div className="stack">
+      {group('Starters', builtin)}
+      {group('My presets', mine)}
+    </div>
+  )
+}
+
+/** Save the current settings as a new preset, or overwrite / delete the loaded one of yours. */
+export function SavePresetPanel({ spec, loaded, onChanged }: {
+  spec: BuilderSpec; loaded: Preset | undefined; onChanged: (selectId: string | null) => void
+}) {
   const [name, setName] = useState('')
   const op = useMutation((fn: () => Promise<unknown>) => fn())
   const busy = op.state.status === 'loading'
-  const run = async (fn: () => Promise<unknown>) => { if (await op.mutate(fn) !== undefined) reload() }
-
+  const mine = loaded && !loaded.builtin ? loaded : undefined
+  const run = async (fn: () => Promise<string | null>) => {
+    const id = await op.mutate(fn)
+    if (id !== undefined) onChanged(id as string | null)
+  }
   return (
-    <Panel id="p-presets" label="Presets" title="Start from a setup">
-      <AsyncView state={presets} onRetry={reload} label="presets">
-        {d => {
-          const selected = d.items.find(p => p.id === selectedId)
-          const builtin = d.items.filter(p => p.builtin)
-          const mine = d.items.filter(p => !p.builtin)
-          return (
-            <div className="stack">
-              <div className="field">
-                <label className="label" htmlFor="preset-pick">Preset</label>
-                <div className="row row--nowrap">
-                  <select id="preset-pick" className="select" value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-                    <option value="">{d.items.length ? 'Choose a preset' : 'No presets yet'}</option>
-                    {builtin.length > 0 && <optgroup label="Starter">{builtin.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
-                    {mine.length > 0 && <optgroup label="Yours">{mine.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
-                  </select>
-                  <button type="button" className="btn btn--ghost" disabled={!selected || busy} onClick={() => selected && onLoad({ ...selected.spec, preset_id: selected.id })}>
-                    <Upload size={16} aria-hidden /> Load
-                  </button>
-                </div>
-              </div>
-              {selected && !selected.builtin && (
-                <div className="row">
-                  <button type="button" className="btn btn--ghost btn--sm" disabled={busy}
-                    onClick={() => run(() => api.updatePreset(selected.id, selected.name, spec))}>
-                    <Save size={16} aria-hidden /> Update “{selected.name}” with current settings
-                  </button>
-                  <button type="button" className="btn btn--danger btn--sm" disabled={busy}
-                    onClick={() => {
-                      if (!confirm(`Delete preset “${selected.name}”?`)) return
-                      void run(async () => { await api.deletePreset(selected.id); setSelectedId(''); return true })
-                    }}>
-                    <Trash2 size={16} aria-hidden /> Delete
-                  </button>
-                </div>
-              )}
-              <div className="field">
-                <label className="label" htmlFor="preset-name">Save current settings as</label>
-                <div className="row row--nowrap">
-                  <input id="preset-name" className="input" value={name} maxLength={120} placeholder="Preset name"
-                    onChange={e => setName(e.target.value)} />
-                  <button type="button" className="btn btn--ghost" disabled={!name.trim() || busy}
-                    onClick={() => run(async () => {
-                      const p = await api.createPreset(name.trim(), spec)
-                      setSelectedId(p.id)
-                      setName('')
-                      return p
-                    })}>
-                    <Save size={16} aria-hidden /> Save
-                  </button>
-                </div>
-              </div>
-              {op.state.status === 'error' && <p className="field__error" role="alert">{op.state.error.message}</p>}
-              {op.state.status === 'success' && <p className="field__help" role="status">Presets updated.</p>}
-            </div>
-          )
-        }}
-      </AsyncView>
-    </Panel>
+    <details className="save">
+      <summary className="label">Save as preset</summary>
+      <div className="stack save__body">
+        <div className="field">
+          <label className="label" htmlFor="preset-name">Preset name</label>
+          <div className="row row--nowrap">
+            <input id="preset-name" className="input" value={name} maxLength={120} placeholder="e.g. Morning mantra"
+              onChange={e => setName(e.target.value)} />
+            <button type="button" className="btn btn--ghost" disabled={!name.trim() || busy}
+              onClick={() => run(async () => {
+                const p = await api.createPreset(name.trim(), spec)
+                setName('')
+                return p.id
+              })}>
+              {busy ? <Loader2 size={16} className="spin" aria-hidden /> : <Save size={16} aria-hidden />} Save
+            </button>
+          </div>
+        </div>
+        {mine && (
+          <div className="row">
+            <button type="button" className="btn btn--ghost btn--sm" disabled={busy}
+              onClick={() => run(async () => { await api.updatePreset(mine.id, mine.name, spec); return mine.id })}>
+              <Save size={16} aria-hidden /> Update “{mine.name}”
+            </button>
+            <button type="button" className="btn btn--danger btn--sm" disabled={busy}
+              onClick={() => {
+                if (!confirm(`Delete preset “${mine.name}”?`)) return
+                void run(async () => { await api.deletePreset(mine.id); return null })
+              }}>
+              <Trash2 size={16} aria-hidden /> Delete
+            </button>
+          </div>
+        )}
+        {op.state.status === 'error' && <p className="field__error" role="alert">{op.state.error.message}</p>}
+        {op.state.status === 'success' && <p className="field__help" role="status">Saved.</p>}
+      </div>
+    </details>
   )
 }
