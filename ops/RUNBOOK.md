@@ -8,8 +8,8 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 
 | Path | What |
 |---|---|
-| `~/AceStudio/src` | this repo (gateway, web, ops) |
-| `~/AceStudio/ACE-Step-1.5` | the engine, pinned commit |
+| `~/AceStudio/gateway` | this repo (gateway, web, ops) |
+| `~/AceStudio/engine/ACE-Step-1.5` | the engine, pinned commit |
 | `~/AceStudio/config/{engine,gateway}.env` | secrets, mode 600, never committed |
 | `~/AceStudio/soniyo.sqlite3`, `~/AceStudio/audio/` | library (`SONIYO_DATA_DIR`) |
 | `~/AceStudio/web-dist` | built SPA the gateway serves (`SONIYO_WEB_DIST`) |
@@ -47,9 +47,9 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 
 5. **Engine.**
    ```sh
-   git clone https://github.com/ace-step/ACE-Step-1.5 ~/AceStudio/ACE-Step-1.5
-   cd ~/AceStudio/ACE-Step-1.5
-   git checkout <pinned-commit>              # record it in the decisions log
+   git clone https://github.com/ace-step/ACE-Step-1.5 ~/AceStudio/engine/ACE-Step-1.5
+   cd ~/AceStudio/engine/ACE-Step-1.5
+   git checkout ca1e85fe9430179831e6bc6be790c332190a3866   # pinned; record changes in the decisions log
    uv sync
    uv run acestep-download
    uv run acestep-download --model acestep-5Hz-lm-0.6B
@@ -60,16 +60,16 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 
 6. **Gateway.**
    ```sh
-   git clone <this repo> ~/AceStudio/src
-   cd ~/AceStudio/src/gateway && uv sync
+   git clone <this repo> ~/AceStudio/gateway
+   cd ~/AceStudio/gateway/gateway && uv sync
    ```
    Set your real Firebase project id in `.firebaserc` before step 7 (it feeds
    `SONIYO_CORS_ORIGINS`). Migrations run automatically when the gateway starts.
 
 7. **Services.**
    ```sh
-   ~/AceStudio/src/ops/bin/install.sh --dry-run   # renders + lints into a scratch dir, prints sudo actions
-   ~/AceStudio/src/ops/bin/install.sh
+   ~/AceStudio/gateway/ops/bin/install.sh --dry-run   # renders + lints into a scratch dir, prints sudo actions
+   ~/AceStudio/gateway/ops/bin/install.sh
    ```
    `install.sh` is safe to rerun. It writes the env files (32-byte tokens from
    `openssl rand -hex 32`) only if they are missing, `chmod 600`s them, renders the
@@ -101,7 +101,7 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 
 10. **Health checks.**
     ```sh
-    ~/AceStudio/src/ops/bin/healthcheck.sh                                   # on the Mac
+    ~/AceStudio/gateway/ops/bin/healthcheck.sh                                   # on the Mac
     SONIYO_OWNER_TOKEN=<token> ops/bin/healthcheck.sh https://<mac>.<tailnet>.ts.net   # any tailnet device
     curl https://<mac>.<tailnet>.ts.net/api/v1/health                         # bare, no token
     tail -f ~/Library/Logs/AceStudio/{gateway,engine}.err.log
@@ -109,7 +109,7 @@ Layout on the Mac (all created by `install.sh` or the steps below):
     `healthcheck.sh` exits 0 OK, 2 unreachable or token rejected, 3 engine down, 4 low disk.
 
 11. **Updates.**
-    - Gateway + web served by the Mac: `~/AceStudio/src/ops/bin/update-gateway.sh`
+    - Gateway + web served by the Mac: `~/AceStudio/gateway/ops/bin/update-gateway.sh`
       (`git pull --ff-only`, `uv sync`, `npm ci && npm run build`, copy into
       `SONIYO_WEB_DIST`, `sudo launchctl kickstart -k system/local.acestudio.gateway`,
       waits for a healthy check).
@@ -252,5 +252,5 @@ with a failed task. `grep FAILED ~/Library/Logs/AceStudio/engine*.log | tail` sh
 - Delete songs from the app, prune `~/AceStudio/backups`. Logs rotate automatically
   (step 13); force a rotation with `sudo newsyslog -F -f /etc/newsyslog.d/acestudio.conf`.
 - Old engine checkouts and model caches are the usual space hogs (the checkpoints are
-  ~11 GB). The engine also keeps every render in `~/AceStudio/ACE-Step-1.5/.cache/acestep/tmp/api_audio/`;
+  ~11 GB). The engine also keeps every render in `~/AceStudio/engine/ACE-Step-1.5/.cache/acestep/tmp/api_audio/`;
   the gateway has its own copy, so these can be deleted.
