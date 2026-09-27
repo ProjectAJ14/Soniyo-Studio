@@ -23,6 +23,13 @@ export class ApiError extends Error {
 
 const TIMEOUT_MS = 15_000
 
+/** Tailscale Serve answers 502/503/504 with no JSON envelope when the gateway behind it is down.
+ * That is "Mac unreachable", not an API error (the gateway's own 503 carries an envelope). */
+export function isProxyDown(status: number, data: unknown): boolean {
+  return (status === 502 || status === 503 || status === 504) && !(data as { error?: unknown } | null)?.error
+}
+export const PROXY_DOWN_MESSAGE = "Your Mac's gateway isn't answering (it may be restarting). Wait a moment, then retry."
+
 function base(): { url: string; token: string } {
   const p = getPairing()
   if (!p) throw new ApiError('unpaired', 'unpaired', 'Pair this device with your Mac first.', false)
@@ -49,6 +56,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 204) return undefined as T
   const data: unknown = await res.json().catch(() => null)
   if (!res.ok) {
+    if (isProxyDown(res.status, data)) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
     const err = (data as { error?: { code: string; message: string; retryable: boolean } } | null)?.error
     const kind: ApiErrorKind = res.status === 401 ? 'unauthorized' : 'api'
     throw new ApiError(kind, err?.code ?? 'internal', err?.message ?? `Gateway returned ${res.status}.`,

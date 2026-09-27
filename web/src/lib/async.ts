@@ -58,7 +58,8 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): [AsyncState<
     addEventListener(RECONNECTED, onReconnect)
     return () => removeEventListener(RECONNECTED, onReconnect)
   }, [load])
-  const set = useCallback((data: T) => setState({ status: 'success', data }), [])
+  // Pushed data (SSE) is fresher than any load still in flight: invalidate those.
+  const set = useCallback((data: T) => { ++run.current; setState({ status: 'success', data }) }, [])
   return [state, load, set]
 }
 

@@ -1,15 +1,17 @@
 // Polls /health so the whole app knows whether the Mac is online, unreachable or rejecting us.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { KeyRound, RotateCw, WifiOff } from 'lucide-react'
+import { AlertTriangle, KeyRound, RotateCw, WifiOff } from 'lucide-react'
 import { api } from '../../api/client'
 import type { Health } from '../../api/types'
 import { notifyReconnected, toApiError } from '../../lib/async'
 import { forgetPairing } from './pairing'
 
-export type ConnectionStatus = 'checking' | 'online' | 'unreachable' | 'unauthorized'
+export type ConnectionStatus = 'checking' | 'online' | 'unreachable' | 'unauthorized' | 'error'
 
 export interface Connection {
   status: ConnectionStatus
+  /** Gateway error code when status is 'error' (it answered, but with a failure). */
+  errorCode: string | null
   health: Health | null
   lastChecked: Date | null
   retry: () => void
@@ -19,7 +21,7 @@ const POLL_MS = 15_000
 const Ctx = createContext<Connection | null>(null)
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Omit<Connection, 'retry'>>({ status: 'checking', health: null, lastChecked: null })
+  const [state, setState] = useState<Omit<Connection, 'retry'>>({ status: 'checking', errorCode: null, health: null, lastChecked: null })
   const run = useRef(0)
   const wasDown = useRef(false)
 
@@ -27,19 +29,22 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const id = ++run.current
     let status: ConnectionStatus
     let health: Health | null = null
+    let errorCode: string | null = null
     try {
       health = await api.health()
       // A bad token still gets the reduced public /health; /catalog tells us whether we're authorised.
       if (!health.engine && !health.disk) await api.catalog()
       status = 'online'
     } catch (e) {
-      // A gateway 5xx behind Tailscale Serve is as good as down from here.
-      status = toApiError(e).kind === 'unauthorized' ? 'unauthorized' : 'unreachable'
+      // client.ts already classifies a proxy 5xx (gateway down behind Tailscale) as unreachable.
+      const err = toApiError(e)
+      status = err.kind === 'unauthorized' ? 'unauthorized' : err.kind === 'api' ? 'error' : 'unreachable'
+      if (status === 'error') errorCode = err.code
     }
     if (id !== run.current) return
     if (status === 'online' && wasDown.current) notifyReconnected()
     wasDown.current = status === 'unreachable'
-    setState(s => ({ status, health: health ?? s.health, lastChecked: new Date() }))
+    setState(s => ({ status, errorCode, health: health ?? s.health, lastChecked: new Date() }))
   }, [])
 
   const retry = useCallback(() => {
@@ -71,7 +76,19 @@ export function useConnection(): Connection {
 }
 
 export function ConnectionBanner() {
-  const { status, retry } = useConnection()
+  const { status, errorCode, retry } = useConnection()
+  if (status === 'error') {
+    return (
+      <div className="banner" role="alert">
+        <AlertTriangle size={16} aria-hidden />
+        <span>Your Mac's gateway returned an error: {errorCode}</span>
+        <span className="spacer" />
+        <button type="button" className="btn btn--ghost btn--sm" onClick={retry}>
+          <RotateCw size={16} aria-hidden /> Retry
+        </button>
+      </div>
+    )
+  }
   if (status === 'unreachable') {
     return (
       <div className="banner" role="alert">

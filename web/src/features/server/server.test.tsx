@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ApiError } from '../../api/client'
+import { ApiError, isProxyDown } from '../../api/client'
 import { getPairing, setPairing } from '../../lib/pairing'
 
 vi.mock('../../api/client', async orig => {
@@ -66,6 +66,14 @@ describe('PairingScreen', () => {
     expect(fetch).not.toHaveBeenCalled()
     expect(checkUrl('http://localhost:8787')).toBeNull()
   })
+
+  it('treats a bodiless 502 from Tailscale Serve as unreachable, not "not a gateway"', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('', { status: 502 })))
+    await pair()
+    expect(await screen.findByText(/gateway isn't answering/)).toBeInTheDocument()
+    expect(isProxyDown(503, { error: { code: 'engine_unavailable' } })).toBe(false)
+    expect(isProxyDown(504, null)).toBe(true)
+  })
 })
 
 describe('ConnectionBanner', () => {
@@ -77,6 +85,13 @@ describe('ConnectionBanner', () => {
     expect(await screen.findByText(/Is the Tailscale app connected/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /retry/i }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
+  it('shows a gateway error, not the Tailscale banner, when the gateway answers with a failure', async () => {
+    vi.mocked(api.health).mockRejectedValue(new ApiError('api', 'internal', 'disk', true, 500))
+    render(<ConnectionProvider><ConnectionBanner /></ConnectionProvider>)
+    expect(await screen.findByText(/gateway returned an error: internal/)).toBeInTheDocument()
+    expect(screen.queryByText(/Tailscale/)).toBeNull()
   })
 
   it('offers Re-pair when the token is rejected', async () => {

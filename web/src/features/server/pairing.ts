@@ -1,5 +1,5 @@
 // Pairing verification and forgetting (F26). Kept out of the component files for fast refresh.
-import { ApiError } from '../../api/client'
+import { ApiError, PROXY_DOWN_MESSAGE, isProxyDown } from '../../api/client'
 import type { Health } from '../../api/types'
 import { getPairing, setPairing, type Pairing } from '../../lib/pairing'
 
@@ -38,6 +38,7 @@ async function get<T>(p: Pairing, path: string): Promise<T> {
     throw new ApiError('unauthorized', 'unauthorized', 'Token rejected. Copy the owner token from the Mac again.', false, 401)
   }
   const data: unknown = await res.json().catch(() => null)
+  if (isProxyDown(res.status, data)) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
   if (!res.ok || data === null) {
     throw new ApiError('api', 'not_gateway', `That address answered, but not like a Soniyo gateway (HTTP ${res.status}).`, true, res.status)
   }
