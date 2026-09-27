@@ -1,0 +1,12 @@
+# Rotation for ~/Library/Logs/AceStudio, rendered by ops/bin/install.sh into
+# /etc/newsyslog.d/acestudio.conf. Placeholders: __HOME__ __USER__ __GROUP__.
+# 7 gzipped archives, rotate at 10 MB (size is in KB), no time trigger.
+# B: no rotation banner line (the gateway logs are JSON lines). N: no process to signal.
+# gateway.log is not listed: the gateway rotates it itself (RotatingFileHandler, 5 x 5 MB).
+# logfilename                                      [owner:group]    mode count size  when flags
+__HOME__/Library/Logs/AceStudio/engine.log          __USER__:__GROUP__ 644 7    10240 *    BNZ
+__HOME__/Library/Logs/AceStudio/engine.err.log      __USER__:__GROUP__ 644 7    10240 *    BNZ
+__HOME__/Library/Logs/AceStudio/gateway.out.log     __USER__:__GROUP__ 644 7    10240 *    BNZ
+__HOME__/Library/Logs/AceStudio/gateway.err.log     __USER__:__GROUP__ 644 7    10240 *    BNZ
+__HOME__/Library/Logs/AceStudio/backup.log          __USER__:__GROUP__ 644 7    10240 *    BNZ
+__HOME__/Library/Logs/AceStudio/backup.err.log      __USER__:__GROUP__ 644 7    10240 *    BNZ

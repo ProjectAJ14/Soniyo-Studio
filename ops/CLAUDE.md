@@ -8,6 +8,7 @@ scripts that install, check, back up and update it. Procedure: `RUNBOOK.md`.
 | `env/*.env.example` | Env templates. `install.sh` copies them to `~/AceStudio/config/` and fills `__PLACEHOLDER__` secrets |
 | `launchd/*.plist.template` | LaunchDaemons (`UserName`, logs in `~/Library/Logs/AceStudio`). Placeholders: `__USER__ __HOME__ __REPO__ __CONFIG__` |
 | `bin/run-engine.sh`, `bin/run-gateway.sh` | launchd entry points: source the env file (plists cannot), then `exec` |
+| `newsyslog/acestudio.conf.template` | Log rotation for `~/Library/Logs/AceStudio`, installed to `/etc/newsyslog.d/` by `install.sh`. Placeholders: `__HOME__ __USER__ __GROUP__` |
 | `bin/install.sh` | Idempotent installer; `--dry-run [--out DIR]` touches nothing outside the scratch dir |
 | `bin/healthcheck.sh`, `backup.sh`, `update-gateway.sh`, `new-token.sh` | Day-2 operations |
 

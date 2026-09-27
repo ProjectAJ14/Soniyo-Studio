@@ -1,5 +1,5 @@
 #!/bin/bash
-# Idempotent installer for the headless Mac: env files, LaunchDaemons, sudoers rule.
+# Idempotent installer for the headless Mac: env files, LaunchDaemons, sudoers rule, log rotation.
 # Usage: ops/bin/install.sh [--dry-run [--out DIR]]
 #   --dry-run  render everything into a scratch dir, lint it, print the sudo actions, touch nothing else.
 # Run as your normal user; it calls sudo only where root is required.
@@ -92,6 +92,13 @@ sudoers=$render/acestudio.sudoers
 echo "$user ALL=(root) NOPASSWD: /bin/launchctl kickstart -k system/local.acestudio.engine" > "$sudoers"
 visudo -cf "$sudoers" >/dev/null || die "generated sudoers rule failed visudo"
 run sudo install -m 440 -o root -g wheel "$sudoers" /etc/sudoers.d/acestudio
+
+# Log rotation for ~/Library/Logs/AceStudio (newsyslog runs every 30 min via launchd).
+rotation=$render/acestudio.newsyslog.conf
+sed -e "s|__HOME__|$(esc "$home")|g" -e "s|__USER__|$(esc "$user")|g" \
+  -e "s|__GROUP__|$(esc "$(id -gn)")|g" "$repo/ops/newsyslog/acestudio.conf.template" > "$rotation"
+! grep -q '__[A-Z_]*__' "$rotation" || die "$rotation still has __PLACEHOLDER__ values"
+run sudo install -m 644 -o root -g wheel "$rotation" /etc/newsyslog.d/acestudio.conf
 
 # --- load services ----------------------------------------------------------------------------
 # shellcheck source=/dev/null

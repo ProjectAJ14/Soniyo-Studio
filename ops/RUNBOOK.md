@@ -14,7 +14,8 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 | `~/AceStudio/soniyo.sqlite3`, `~/AceStudio/audio/` | library (`SONIYO_DATA_DIR`) |
 | `~/AceStudio/web-dist` | built SPA the gateway serves (`SONIYO_WEB_DIST`) |
 | `~/AceStudio/backups` | nightly database snapshots |
-| `~/Library/Logs/AceStudio/*.log` | service logs |
+| `~/Library/Logs/AceStudio/*.log` | service logs (rotated, step 13) |
+| `/etc/newsyslog.d/acestudio.conf` | log rotation, rendered from `ops/newsyslog/` |
 | `/Library/LaunchDaemons/local.acestudio.{engine,gateway,backup}.plist` | services |
 
 ## Setup, step by step
@@ -128,6 +129,20 @@ Layout on the Mac (all created by `install.sh` or the steps below):
     copy a snapshot over `~/AceStudio/soniyo.sqlite3`, remove any `-wal`/`-shm` next to
     it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/local.acestudio.gateway.plist`.
 
+13. **Log rotation.** Two mechanisms, nothing to run by hand:
+    - `gateway.log` (JSON lines) is rotated by the gateway itself: Python
+      `RotatingFileHandler`, 5 MB × 5 archives (`gateway.log.1`…`.5`). launchd sends the
+      gateway's stdout to `gateway.out.log`, so nothing else writes `gateway.log`.
+    - Everything launchd writes (`engine{,.err}.log`, `gateway.{out,err}.log`,
+      `backup{,.err}.log`) is rotated by macOS `newsyslog` (runs every 30 min):
+      `install.sh` renders `ops/newsyslog/acestudio.conf.template` into
+      `/etc/newsyslog.d/acestudio.conf` — at 10 MB, 7 gzipped archives (`engine.log.0.gz`…).
+      Check it with `sudo newsyslog -nv -f /etc/newsyslog.d/acestudio.conf`.
+    - Caveat: launchd keeps a long-running service's log file open, so after a rotation
+      the engine/gateway keep writing to the rotated file until they restart (backup
+      reopens its log every run). If `engine.log` stays empty after a rotation, run
+      `sudo launchctl kickstart -k system/local.acestudio.engine`.
+
 ## Milestone 0 procedure
 
 Run on the Mac against the engine directly (the gateway is not needed). Load the key once:
@@ -224,6 +239,6 @@ PRD decisions log.
 
 **Low disk** (`healthcheck.sh` exits 4, Server screen warns):
 - `df -h ~` and `du -sh ~/AceStudio/{audio,backups} ~/Library/Logs/AceStudio ~/.cache/huggingface 2>/dev/null`
-- Delete songs from the app, prune `~/AceStudio/backups`, truncate big logs
-  (`: > ~/Library/Logs/AceStudio/engine.log`); logs are not rotated automatically.
+- Delete songs from the app, prune `~/AceStudio/backups`. Logs rotate automatically
+  (step 13); force a rotation with `sudo newsyslog -F -f /etc/newsyslog.d/acestudio.conf`.
 - Old engine checkouts and model caches are the usual space hogs.

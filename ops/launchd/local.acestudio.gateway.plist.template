@@ -29,7 +29,7 @@
 	<key>ThrottleInterval</key>
 	<integer>10</integer>
 	<key>StandardOutPath</key>
-	<string>__HOME__/Library/Logs/AceStudio/gateway.log</string>
+	<string>__HOME__/Library/Logs/AceStudio/gateway.out.log</string>
 	<key>StandardErrorPath</key>
 	<string>__HOME__/Library/Logs/AceStudio/gateway.err.log</string>
 </dict>
