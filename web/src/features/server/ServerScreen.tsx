@@ -88,7 +88,7 @@ export function ServerScreen() {
     <div className="stack">
       <div className="page-head">
         <div className="stack server__title">
-          <span className="label">Server</span>
+          <span className="label">Settings</span>
           <h1>Your <em>Mac</em></h1>
         </div>
         <span className="spacer" />

@@ -1,4 +1,4 @@
-import { Library, ListMusic, Music, Server, Sparkles } from 'lucide-react'
+import { Library, ListMusic, Music, Settings, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { usePairing } from '../lib/pairing'
 import { href, useRoute, type Route } from './router'
@@ -15,14 +15,14 @@ import { PlayerBar } from '../features/player/PlayerBar'
 
 const TABS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: { name: 'create' }, label: 'Create', icon: <Sparkles size={18} aria-hidden /> },
-  { route: { name: 'queue' }, label: 'Queue', icon: <ListMusic size={18} aria-hidden /> },
-  { route: { name: 'library' }, label: 'Library', icon: <Library size={18} aria-hidden /> },
-  { route: { name: 'server' }, label: 'Server', icon: <Server size={18} aria-hidden /> },
+  { route: { name: 'queue' }, label: 'In progress', icon: <ListMusic size={18} aria-hidden /> },
+  { route: { name: 'library' }, label: 'My songs', icon: <Library size={18} aria-hidden /> },
+  { route: { name: 'server' }, label: 'Settings', icon: <Settings size={18} aria-hidden /> },
 ]
 
 function Screen({ route }: { route: Route }) {
   switch (route.name) {
-    case 'create': return <CreateScreen />
+    case 'create': return null // always mounted in Shell
     case 'queue': return <QueueScreen />
     case 'library': return <LibraryScreen />
     case 'song': return <SongScreen id={route.id} />
@@ -57,6 +57,8 @@ function Shell() {
       </header>
       <ConnectionBanner />
       <main className="main">
+        {/* Create stays mounted so half-built settings survive a trip to another tab. */}
+        <div hidden={route.name !== 'create'}><CreateScreen active={route.name === 'create'} /></div>
         <Screen route={route} />
       </main>
       <PlayerBar />

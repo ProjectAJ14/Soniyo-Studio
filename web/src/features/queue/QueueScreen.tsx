@@ -18,7 +18,7 @@ export function QueueScreen() {
   return (
     <>
       <div className="page-head">
-        <h1>Queue</h1>
+        <h1>In progress</h1>
         <span className="spacer" />
         <span className="label">{live === 'sse' ? 'Live' : 'Updating every 5 s'}</span>
       </div>

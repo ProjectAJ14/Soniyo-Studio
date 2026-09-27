@@ -28,7 +28,7 @@ export function LibraryScreen() {
   return (
     <>
       <div className="page-head">
-        <h1>Library</h1>
+        <h1>My songs</h1>
         <span className="spacer" />
         {songs.status === 'success' && (
           <span className="label">
