@@ -7,7 +7,7 @@ import { takeDraft } from '../../lib/draft'
 import { SongScreen } from './SongScreen'
 
 const api = vi.hoisted(() => ({
-  getSong: vi.fn(), patchSong: vi.fn(), deleteSong: vi.fn(), regenerateSong: vi.fn(),
+  getSong: vi.fn(), patchSong: vi.fn(), deleteSong: vi.fn(), regenerateSong: vi.fn(), audioBlob: vi.fn(),
   audioUrl: (id: string, fmt = 'mp3', dl = false) => `http://mac/api/v1/songs/${id}/audio?format=${fmt}${dl ? '&download=1' : ''}`,
 }))
 vi.mock('../../api/client', async orig => ({ ...(await orig<typeof import('../../api/client')>()), api }))
@@ -40,6 +40,25 @@ describe('song', () => {
     expect(screen.getByText('tanpura')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Download FLAC' })).toHaveAttribute('href', expect.stringContaining('format=flac&download=1'))
     expect(screen.getByRole('link', { name: 'Download MP3' })).toHaveAttribute('download')
+  })
+
+  it('shares the MP3 file itself, not the app URL', async () => {
+    api.getSong.mockResolvedValue(song)
+    api.audioBlob.mockResolvedValue(new Blob(['mp3'], { type: 'audio/mpeg' }))
+    const share = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { canShare: () => true, share })
+    try {
+      render(<SongScreen id="s1" />)
+      fireEvent.click(await screen.findByRole('button', { name: /Share/ }))
+      await vi.waitFor(() => expect(share).toHaveBeenCalled())
+      const { files, title } = share.mock.calls[0][0] as { files: File[]; title: string }
+      expect(title).toBe('Om Namah Shivaya')
+      expect(files[0].name).toBe('Om Namah Shivaya.mp3')
+      expect(files[0].type).toBe('audio/mpeg')
+      expect(api.audioBlob).toHaveBeenCalledWith('s1')
+    } finally {
+      Object.assign(navigator, { canShare: undefined, share: undefined })
+    }
   })
 
   it('delete needs an inline confirm, then navigates to the library', async () => {

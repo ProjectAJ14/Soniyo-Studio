@@ -1,5 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowLeft, Check, Copy, Download, Pencil, Play, RefreshCw, Share2, Shuffle, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { ArrowLeft, Check, Download, Loader2, Pencil, Play, RefreshCw, Share2, Shuffle, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
 import { api } from '../../api/client'
 import type { Song } from '../../api/types'
 import { href, navigate } from '../../app/router'
@@ -57,7 +57,7 @@ function SongDetail({ song, onChange }: { song: Song; onChange: (s: Song) => voi
           <a className="btn btn--ghost" href={api.audioUrl(song.id, 'flac', true)} download>
             <Download size={16} aria-hidden /> Download FLAC
           </a>
-          <ShareButton title={song.title} />
+          <ShareButton songId={song.id} title={song.title} />
         </div>
         <div className="row">
           <button type="button" className="btn btn--ghost" disabled={regen.state.status === 'loading' || song.seed === null}
@@ -174,33 +174,48 @@ function Title({ song, onChange }: { song: Song; onChange: (s: Song) => void }) 
   )
 }
 
-function ShareButton({ title }: { title: string }) {
-  const share = useMutation(async (): Promise<'shared' | 'copied'> => {
-    const url = location.href
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title, url })
-        return 'shared'
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return 'shared' // user closed the sheet
-        throw e
+/** F22: hand the MP3 itself to the share sheet (Files, AirDrop, Messages); download where the
+ * browser cannot share files. */
+function ShareButton({ songId, title }: { songId: string; title: string }) {
+  const file = useRef<File | null>(null)
+  const share = useMutation(async (): Promise<'shared' | 'again' | 'downloaded'> => {
+    if (typeof navigator.canShare === 'function') {
+      file.current ??= new File([await api.audioBlob(songId)], mp3Name(title), { type: 'audio/mpeg' })
+      const files = [file.current]
+      if (navigator.canShare({ files })) {
+        try {
+          await navigator.share({ files, title })
+          return 'shared'
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return 'shared' // user closed the sheet
+          // Safari drops the tap's permission while the file downloads; it is cached now.
+          if (e instanceof DOMException && e.name === 'NotAllowedError') return 'again'
+          throw e
+        }
       }
     }
-    if (!navigator.clipboard) throw new Error('Sharing is not available in this browser.')
-    await navigator.clipboard.writeText(url)
-    return 'copied'
+    const a = document.createElement('a')
+    a.href = api.audioUrl(songId, 'mp3', true)
+    a.download = mp3Name(title)
+    a.click()
+    return 'downloaded'
   })
+  const done = share.state.status === 'success' ? share.state.data : null
   return (
     <>
       <button type="button" className="btn btn--ghost" disabled={share.state.status === 'loading'} onClick={() => share.mutate()}>
-        {share.state.status === 'success' && share.state.data === 'copied'
-          ? <><Copy size={16} aria-hidden /> Link copied</>
+        {share.state.status === 'loading'
+          ? <><Loader2 size={16} className="spin" aria-hidden /> Preparing…</>
+          : done === 'again' ? <><Share2 size={16} aria-hidden /> Ready: tap to share</>
+          : done === 'downloaded' ? <><Download size={16} aria-hidden /> Downloaded</>
           : <><Share2 size={16} aria-hidden /> Share</>}
       </button>
       {share.state.status === 'error' && <span className="song__err" role="alert">{share.state.error.message}</span>}
     </>
   )
 }
+
+const mp3Name = (title: string) => `${title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 100) || 'song'}.mp3`
 
 function DeleteButton({ song }: { song: Song }) {
   const [confirming, setConfirming] = useState(false)

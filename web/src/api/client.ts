@@ -36,7 +36,8 @@ function base(): { url: string; token: string } {
   return { url: p.baseUrl.replace(/\/+$/, '') + '/api/v1', token: p.token }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** fetch + the error model; resolves only with an ok Response. */
+async function send(method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const { url, token } = base()
   let res: Response
   try {
@@ -47,22 +48,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch {
     throw new ApiError('unreachable', 'unreachable',
       "Can't reach your Mac. Check that the Tailscale app is connected, then retry.", true)
   }
-  if (res.status === 204) return undefined as T
+  if (res.ok) return res
   const data: unknown = await res.json().catch(() => null)
-  if (!res.ok) {
-    if (isProxyDown(res.status, data)) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
-    const err = (data as { error?: { code: string; message: string; retryable: boolean } } | null)?.error
-    const kind: ApiErrorKind = res.status === 401 ? 'unauthorized' : 'api'
-    throw new ApiError(kind, err?.code ?? 'internal', err?.message ?? `Gateway returned ${res.status}.`,
-      err?.retryable ?? res.status >= 500, res.status)
-  }
-  return data as T
+  if (isProxyDown(res.status, data)) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
+  const err = (data as { error?: { code: string; message: string; retryable: boolean } } | null)?.error
+  const kind: ApiErrorKind = res.status === 401 ? 'unauthorized' : 'api'
+  throw new ApiError(kind, err?.code ?? 'internal', err?.message ?? `Gateway returned ${res.status}.`,
+    err?.retryable ?? res.status >= 500, res.status)
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body)
+  if (res.status === 204) return undefined as T
+  return (await res.json().catch(() => null)) as T
 }
 
 const q = (params: Record<string, string | number | boolean | undefined | null>) => {
@@ -100,6 +104,8 @@ export const api = {
   deletePreset: (id: string) => request<void>('DELETE', `/presets/${id}`),
 
   /** URLs for elements that cannot send headers (<audio>, <a download>, EventSource). */
+  /** The MP3 as a Blob, for the share sheet (F22). Generous timeout: a 10-minute song is ~15 MB. */
+  audioBlob: (id: string) => send('GET', `/songs/${id}/audio?format=mp3`, undefined, 120_000).then(r => r.blob()),
   audioUrl: (id: string, format: 'mp3' | 'flac' = 'mp3', download = false) => {
     const { url, token } = base()
     return `${url}/songs/${id}/audio` + q({ format, download: download ? 1 : undefined, token })
