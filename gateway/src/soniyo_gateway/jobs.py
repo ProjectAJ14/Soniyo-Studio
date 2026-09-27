@@ -1,5 +1,6 @@
 """Job service: create (idempotent), list, cancel, retry, and the Job wire snapshot."""
 
+import sqlite3
 import uuid
 from datetime import UTC, datetime
 
@@ -65,7 +66,13 @@ def create(repo: Repo, spec: BuilderSpec) -> tuple[Job, bool]:
         return to_schema(repo, existing), False
     job_id = uuid.uuid4().hex
     spec = spec.model_copy(update={"client_job_id": cid})
-    repo.insert_job(job_id, cid, title_for(spec), spec)
+    try:
+        repo.insert_job(job_id, cid, title_for(spec), spec)
+    except sqlite3.IntegrityError:  # a concurrent retry with the same id won the insert
+        existing = repo.get_job_by_client_id(cid)
+        if existing is None:
+            raise
+        return to_schema(repo, existing), False
     return get(repo, job_id), True
 
 

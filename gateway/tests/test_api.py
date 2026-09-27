@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 import logging
 from pathlib import Path
 
@@ -69,6 +70,29 @@ def test_idempotent_create(client: TestClient) -> None:
     r2 = client.post("/api/v1/jobs", json={"client_job_id": "same", "title": "B"})
     assert (r1.status_code, r2.status_code) == (202, 200)
     assert r1.json()["id"] == r2.json()["id"] and r2.json()["title"] == "A"
+
+
+def test_idempotent_create_concurrent(client: TestClient, monkeypatch) -> None:
+    client.app.state.rt.engine.seconds = 30
+    repo = client.app.state.rt.repo
+    first = client.post("/api/v1/jobs", json={"client_job_id": "race"}).json()
+    real, calls = repo.get_job_by_client_id, []
+
+    def lagging(cid: str):  # the pre-insert check misses the concurrent winner's row
+        calls.append(cid)
+        return None if len(calls) == 1 else real(cid)
+
+    monkeypatch.setattr(repo, "get_job_by_client_id", lagging)
+    r = client.post("/api/v1/jobs", json={"client_job_id": "race"})
+    assert r.status_code == 200 and r.json()["id"] == first["id"]
+
+    monkeypatch.undo()
+    with ThreadPoolExecutor(8) as pool:
+        codes = list(pool.map(
+            lambda _: client.post("/api/v1/jobs", json={"client_job_id": "par"}).status_code,
+            range(8),
+        ))  # fmt: skip
+    assert sorted(codes) == [200] * 7 + [202]
 
 
 def test_lifecycle_song_and_sse(client: TestClient) -> None:
