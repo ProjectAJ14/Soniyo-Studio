@@ -63,7 +63,8 @@ def audio_path(repo: Repo, song_id: str, fmt: str) -> tuple[Song, Path]:
 def regenerate(repo: Repo, song_id: str, seed: str) -> Job:
     song = get_song(repo, song_id)
     engine = song.spec.engine.model_copy(update={"seed": song.seed if seed == "same" else None})
-    return jobs.resubmit(repo, song.spec.model_copy(update={"engine": engine}))
+    # the song's current title, so a rename carries into its regenerations
+    return jobs.resubmit(repo, song.spec.model_copy(update={"engine": engine, "title": song.title}))
 
 
 # ---- presets ------------------------------------------------------------------------------
