@@ -1,10 +1,11 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
 
 from .. import audio, library
 from ..auth import require_token, require_token_or_query
+from ..errors import ApiError
 from ..schemas import Job, RegenerateRequest, Song, SongList, SongPatch
 from . import Rt
 
@@ -35,9 +36,12 @@ def delete_song(song_id: str, rt: Rt) -> Response:
 
 
 @router.get("/{song_id}/audio", dependencies=[Depends(require_token_or_query)])
-def song_audio(song_id: str, rt: Rt, format: Literal["mp3", "flac"] = "mp3",
+def song_audio(song_id: str, rt: Rt, request: Request, format: Literal["mp3", "flac"] = "mp3",
                download: bool = False) -> FileResponse:  # fmt: skip
     song, path = library.audio_path(rt.repo, song_id, format)
+    start = audio.range_start(request.headers.get("range"))
+    if start is not None and start >= path.stat().st_size:
+        raise ApiError("range_not_satisfiable", "The requested range is past the end of the file.")
     name = audio.safe_filename(song.title, format) if download else None
     return audio.file_response(path, format, name)
 

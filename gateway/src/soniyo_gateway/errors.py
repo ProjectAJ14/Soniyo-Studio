@@ -12,6 +12,8 @@ _STATUS = {
     "not_found": 404,
     "validation_failed": 422,
     "conflict": 409,
+    "method_not_allowed": 405,
+    "range_not_satisfiable": 416,
     "engine_unavailable": 503,
     "internal": 500,
 }
@@ -51,12 +53,12 @@ def install(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-        code = {401: "unauthorized", 404: "not_found", 409: "conflict"}.get(exc.status_code)
-        if code is None:
+        codes = {401: "unauthorized", 404: "not_found", 405: "method_not_allowed",
+                 409: "conflict", 416: "range_not_satisfiable"}  # fmt: skip
+        code = codes.get(exc.status_code)
+        if code is None:  # any other status becomes a documented code/status pair
             code = "validation_failed" if exc.status_code < 500 else "internal"
-        return JSONResponse(
-            ApiError(code, str(exc.detail)).body(), status_code=exc.status_code
-        )
+        return _json(ApiError(code, str(exc.detail)))
 
 
 

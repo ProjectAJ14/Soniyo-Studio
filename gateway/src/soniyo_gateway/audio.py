@@ -47,6 +47,13 @@ def safe_filename(title: str, ext: str) -> str:
     return f"{name or 'song'}.{ext}"
 
 
+def range_start(header: str | None) -> int | None:
+    """First byte of a single `bytes=N-...` range; None when absent or another form
+    (FileResponse still validates those itself)."""
+    m = re.fullmatch(r"\s*bytes=(\d+)-\d*\s*", header or "")
+    return int(m.group(1)) if m else None
+
+
 def file_response(path: Path, fmt: str, download_name: str | None) -> FileResponse:
     """Starlette's FileResponse honours Range (206 / 416) and sets Accept-Ranges."""
     return FileResponse(

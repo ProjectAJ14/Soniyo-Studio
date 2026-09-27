@@ -1,12 +1,18 @@
+import base64
+import dataclasses
+import hashlib
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from conftest import ORIGIN, TOKEN, submit, wait_state
+import pytest
+from conftest import ORIGIN, TOKEN, open_client, submit, wait_state
 from fastapi.testclient import TestClient
 
 from soniyo_gateway.audio import safe_filename
+from soniyo_gateway.config import Settings
+from soniyo_gateway.engine.fake import FakeEngine
 from soniyo_gateway.main import setup_logging
 
 
@@ -128,7 +134,8 @@ def test_audio_range_and_download(client: TestClient) -> None:
     part = client.get(url, headers={"Range": "bytes=0-99"})
     assert part.status_code == 206 and len(part.content) == 100
     assert part.headers["content-range"] == f"bytes 0-99/{size}"
-    assert client.get(url, headers={"Range": f"bytes={size + 10}-"}).status_code == 416
+    bad = client.get(url, headers={"Range": f"bytes={size + 10}-"})
+    assert bad.status_code == 416 and bad.json()["error"]["code"] == "range_not_satisfiable"
     flac = client.get(f"{url}?format=flac&download=1&token={TOKEN}", headers={"Authorization": ""})
     assert flac.headers["content-type"] == "audio/flac"
     assert flac.headers["content-disposition"] == "attachment; filename*=utf-8''Om%20x.flac"
@@ -244,3 +251,33 @@ def test_regenerate_same_without_seed_conflicts(client: TestClient) -> None:
     assert r.status_code == 409 and r.json()["error"]["code"] == "conflict"
     r = client.post(f"/api/v1/songs/{job['song_id']}/regenerate", json={"seed": "new"})
     assert r.status_code == 202
+
+
+def test_errors_keep_documented_codes(client: TestClient) -> None:
+    r = client.put("/api/v1/jobs")
+    assert r.status_code == 405 and r.json()["error"]["code"] == "method_not_allowed"
+
+
+def test_spa_served_with_security_headers(settings: Settings, fake: FakeEngine,
+                                          tmp_path: Path) -> None:  # fmt: skip
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    html = '<script>boot()</script><script type="module" src="/a.js"></script>'
+    (dist / "index.html").write_text(html)
+    with open_client(dataclasses.replace(settings, web_dist=dist), fake) as c:
+        r = c.get("/")
+        csp = r.headers["content-security-policy"]
+        digest = base64.b64encode(hashlib.sha256(b"boot()").digest()).decode()
+        assert f"'sha256-{digest}'" in csp and "frame-ancestors 'none'" in csp
+        assert r.headers["x-content-type-options"] == "nosniff"
+        assert r.headers["referrer-policy"] == "no-referrer"
+        api = c.get("/api/v1/health")
+        assert "content-security-policy" not in api.headers
+        assert api.headers["referrer-policy"] == "no-referrer"
+
+
+def test_host_must_be_loopback(monkeypatch) -> None:
+    monkeypatch.setenv("SONIYO_OWNER_TOKEN", "t" * 40)
+    monkeypatch.setenv("SONIYO_HOST", "0.0.0.0")
+    with pytest.raises(SystemExit):
+        Settings.from_env()

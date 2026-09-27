@@ -46,10 +46,13 @@ class Settings:
         if len(token) < 32:
             raise SystemExit("SONIYO_OWNER_TOKEN must be set to at least 32 characters")
         web_dist = env.get("SONIYO_WEB_DIST")
+        host = env.get("SONIYO_HOST", "127.0.0.1")
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            raise SystemExit("SONIYO_HOST must be loopback; expose the gateway via Tailscale Serve")
         return cls(
             owner_token=token,
             data_dir=Path(env.get("SONIYO_DATA_DIR", str(Path.home() / "AceStudio"))).expanduser(),
-            host=env.get("SONIYO_HOST", "127.0.0.1"),
+            host=host,
             port=int(env.get("SONIYO_PORT", "8787")),
             cors_origins=_list(env.get("SONIYO_CORS_ORIGINS", "http://localhost:5173")),
             engine=env.get("SONIYO_ENGINE", "acestep"),

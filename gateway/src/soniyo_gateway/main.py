@@ -1,11 +1,14 @@
 """App factory, lifespan (db, presets, recovery, worker, watchdog), CORS, static SPA."""
 
 import asyncio
+import base64
 import contextlib
+import hashlib
 import json
 import logging
 import logging.handlers
 import os
+import re
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -65,6 +68,22 @@ def build_engine(settings: Settings) -> Engine:
     raise SystemExit(f"SONIYO_ENGINE must be 'acestep' or 'fake', not {settings.engine!r}")
 
 
+def spa_headers(web_dist: Path) -> dict[str, str]:
+    """The headers firebase.json sets, for when the gateway serves the SPA itself. Inline
+    scripts in index.html are allowed by hash, computed from the build actually served."""
+    index = web_dist / "index.html"
+    html = index.read_text(encoding="utf-8") if index.is_file() else ""
+    hashes = " ".join(
+        "'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'"
+        for body in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)
+    )
+    csp = (f"default-src 'self'; script-src 'self' {hashes}; style-src 'self'; "
+           "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+           "media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; "
+           "base-uri 'self'; form-action 'self'; frame-ancestors 'none'")  # fmt: skip
+    return {"Content-Security-Policy": csp, "X-Content-Type-Options": "nosniff"}
+
+
 def _die_if_crashed(task: asyncio.Task) -> None:
     """The worker and watchdog only end by cancellation. If one dies anyway, exit so launchd
     KeepAlive restarts the gateway and recover() repairs job states, instead of a gateway that
@@ -104,6 +123,9 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
             conn.close()
             log.info("gateway stopped")
 
+    serve_web = bool(settings.web_dist and settings.web_dist.is_dir())
+    web_headers = spa_headers(settings.web_dist) if serve_web else {}  # type: ignore[arg-type]
+
     app = FastAPI(title="Soniyo gateway", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)  # fmt: skip
 
@@ -114,6 +136,9 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
             response = await call_next(request)
         except Exception as exc:  # noqa: BLE001 - becomes the standard internal error body
             response = errors.unhandled(request, exc)
+        response.headers["Referrer-Policy"] = "no-referrer"  # URLs may carry ?token=
+        if not request.url.path.startswith("/api/"):
+            response.headers.update(web_headers)
         # path only: the query string may carry ?token=
         log.info("%s %s %s %.0fms", request.method, request.url.path, response.status_code,
                  (time.monotonic() - t) * 1000)  # fmt: skip
@@ -130,7 +155,7 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
     errors.install(app)
     for r in (health, catalog, compile, jobs, songs, presets):
         app.include_router(r.router, prefix="/api/v1")
-    if settings.web_dist and settings.web_dist.is_dir():
+    if serve_web:
         app.mount("/", StaticFiles(directory=settings.web_dist, html=True), name="web")
     return app
 

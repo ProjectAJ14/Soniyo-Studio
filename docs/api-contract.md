@@ -23,6 +23,8 @@ mirror: `web/src/api/types.ts`. Field names are identical (snake_case) on both.
   | `not_found` | 404 | false |
   | `validation_failed` | 422 | false |
   | `conflict` (e.g. cancel a running job) | 409 | false |
+  | `method_not_allowed` | 405 | false |
+  | `range_not_satisfiable` (audio `Range` past the end) | 416 | false |
   | `engine_unavailable` | 503 | true |
   | `internal` | 500 | true |
 
