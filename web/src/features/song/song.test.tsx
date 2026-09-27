@@ -1,0 +1,89 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../api/client'
+import type { Song } from '../../api/types'
+import { emptySpec } from '../../api/types'
+import { takeDraft } from '../../lib/draft'
+import { SongScreen } from './SongScreen'
+
+const api = vi.hoisted(() => ({
+  getSong: vi.fn(), patchSong: vi.fn(), deleteSong: vi.fn(), regenerateSong: vi.fn(),
+  audioUrl: (id: string, fmt = 'mp3', dl = false) => `http://mac/api/v1/songs/${id}/audio?format=${fmt}${dl ? '&download=1' : ''}`,
+}))
+vi.mock('../../api/client', async orig => ({ ...(await orig<typeof import('../../api/client')>()), api }))
+vi.mock('../player/PlayerProvider', () => ({ usePlayer: () => ({ play: vi.fn() }) }))
+
+const song: Song = {
+  id: 's1', job_id: 'j1', title: 'Om Namah Shivaya', created_at: '2026-09-27T10:00:00Z', duration_seconds: 185,
+  favourite: false, preset_id: null, seed: 42, engine_info: { model: 'acestep-v15' }, size_bytes: 1000,
+  spec: { ...emptySpec(), title: 'Om Namah Shivaya', lyrics: { text: 'Om\nNamah', repeat: null },
+    instruments: [{ name: 'tanpura', role: 'drone', level: 'soft', frequency: null }] },
+  compiled: { caption: 'peaceful mantra', lyrics: '', negative_prompt: 'drums', params: {} as never, plan: {} as never, routing: [], notes: [] },
+}
+
+beforeEach(() => { location.hash = '#/songs/s1' })
+afterEach(() => { cleanup(); vi.clearAllMocks() })
+
+describe('song', () => {
+  it('shows not found with a link back on 404', async () => {
+    api.getSong.mockRejectedValue(new ApiError('api', 'not_found', 'Song not found.', false, 404))
+    render(<SongScreen id="nope" />)
+    expect(await screen.findByText('Song not found')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Back to library/ })).toHaveAttribute('href', '#/library')
+  })
+
+  it('renders details and download links', async () => {
+    api.getSong.mockResolvedValue(song)
+    render(<SongScreen id="s1" />)
+    expect(await screen.findByRole('heading', { name: 'Om Namah Shivaya' })).toBeInTheDocument()
+    expect(screen.getByText('peaceful mantra')).toBeInTheDocument()
+    expect(screen.getByText('tanpura')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download FLAC' })).toHaveAttribute('href', expect.stringContaining('format=flac&download=1'))
+    expect(screen.getByRole('link', { name: 'Download MP3' })).toHaveAttribute('download')
+  })
+
+  it('delete needs an inline confirm, then navigates to the library', async () => {
+    api.getSong.mockResolvedValue(song)
+    api.deleteSong.mockResolvedValue(undefined)
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    render(<SongScreen id="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(api.deleteSong).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }))
+    expect(screen.queryByText('Delete this song and its audio files?')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' })) })
+    expect(api.deleteSong).toHaveBeenCalledWith('s1')
+    expect(location.hash).toBe('#/library')
+    expect(confirmSpy).not.toHaveBeenCalled()
+  })
+
+  it('shows a delete error inline and stays on the page', async () => {
+    api.getSong.mockResolvedValue(song)
+    api.deleteSong.mockRejectedValue(new ApiError('api', 'internal', 'Disk busy', true, 500))
+    render(<SongScreen id="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' })) })
+    expect(screen.getByRole('alert')).toHaveTextContent('Disk busy')
+    expect(location.hash).toBe('#/songs/s1')
+  })
+
+  it('rename rejects an empty title without calling the API', async () => {
+    api.getSong.mockResolvedValue(song)
+    render(<SongScreen id="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Title cannot be empty.')
+    expect(api.patchSong).not.toHaveBeenCalled()
+  })
+
+  it('edit and regenerate hands the spec to Create', async () => {
+    api.getSong.mockResolvedValue(song)
+    render(<SongScreen id="s1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit and regenerate' }))
+    expect(takeDraft()?.title).toBe('Om Namah Shivaya')
+    expect(location.hash).toBe('#/create')
+  })
+})

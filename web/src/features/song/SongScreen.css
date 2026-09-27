@@ -1,0 +1,17 @@
+.song__back { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--dim); text-decoration: none; min-height: 44px; align-self: flex-start; }
+.song__back:hover { color: var(--spot); }
+.song__title { overflow-wrap: anywhere; }
+.song__meta { gap: var(--space-6); }
+.song__metaitem { display: inline-flex; align-items: baseline; gap: var(--space-2); color: var(--ink); }
+.song__fav[aria-pressed='true'] { color: var(--spot); border-color: var(--spot); }
+.song__err { color: var(--error); font-size: 13px; }
+.song__confirm { padding: var(--space-2) var(--space-3); border: 1px solid var(--error); color: var(--ink); }
+.song__lyrics { white-space: pre-wrap; color: var(--ink); }
+.song__dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-6); margin: 0; }
+.song__dl dt { padding-top: 3px; }
+.song__dl dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.song__tablewrap { overflow-x: auto; }
+.song__table { width: 100%; border-collapse: collapse; }
+.song__table th { text-align: left; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--faint); }
+.song__table th, .song__table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.song__table td { color: var(--ink); }
