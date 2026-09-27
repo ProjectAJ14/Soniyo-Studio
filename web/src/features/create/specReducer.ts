@@ -67,7 +67,9 @@ export function specReducer(s: BuilderSpec, a: SpecAction): BuilderSpec {
   }
 }
 
-export type SpecErrors = Partial<Record<'bpm' | 'duration' | 'repeat' | 'temperature' | 'instruments', string>>
+export type SpecErrors = Partial<Record<'bpm' | 'duration' | 'repeat' | 'temperature' | 'instruments' | 'lyrics', string>>
+
+const MAX_COMPILED_LYRICS = 50_000
 
 /** Mirrors the gateway's pydantic bounds (schemas.py) so nothing invalid is sent. */
 export function validateSpec(s: BuilderSpec): SpecErrors {
@@ -78,6 +80,8 @@ export function validateSpec(s: BuilderSpec): SpecErrors {
   if (!Number.isInteger(t) || t < 10 || t > 600) e.duration = 'Length must be between 0:10 and 10:00.'
   const r = s.lyrics.repeat
   if (r !== null && (!Number.isInteger(r) || r < 1 || r > 1000)) e.repeat = 'Repeat count must be from 1 to 1000.'
+  else if (s.lyrics.text.trim().length * (r ?? 1) > MAX_COMPILED_LYRICS)
+    e.lyrics = `Lyrics × repeat must stay under ${MAX_COMPILED_LYRICS.toLocaleString()} characters.`
   const temp = s.engine.lm_temperature
   if (temp !== null && !(temp >= 0 && temp <= 2)) e.temperature = 'Temperature must be from 0 to 2.'
   if (s.instruments.length > 40) e.instruments = 'At most 40 instruments.'

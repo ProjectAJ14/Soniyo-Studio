@@ -63,4 +63,11 @@ describe('validateSpec', () => {
     s.music.bpm = 60.5
     expect(validateSpec(s).bpm).toBeDefined()
   })
+  it('flags lyrics that blow past the gateway cap once repeated', () => {
+    const s = emptySpec()
+    s.lyrics = { text: 'x'.repeat(100), repeat: 1000 }
+    expect(validateSpec(s).lyrics).toBeDefined()
+    s.lyrics.repeat = 500
+    expect(validateSpec(s).lyrics).toBeUndefined()
+  })
 })

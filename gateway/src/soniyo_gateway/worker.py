@@ -181,7 +181,7 @@ async def _process(rt: Runtime, job_id: str, resume_task: str | None) -> None:
             seed = params.seed
         song = Song(
             id=song_id, job_id=job_id, title=job["title"], created_at=now(),
-            duration_seconds=duration, favourite=False, preset_id=None, spec=spec,
+            duration_seconds=duration, favourite=False, preset_id=spec.preset_id, spec=spec,
             compiled=compiled, seed=seed,
             engine_info=result.info or {"dit": s.dit_model, "lm": s.lm_model},
             size_bytes=flac.stat().st_size + mp3.stat().st_size,

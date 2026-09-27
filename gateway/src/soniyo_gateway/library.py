@@ -62,6 +62,8 @@ def audio_path(repo: Repo, song_id: str, fmt: str) -> tuple[Song, Path]:
 
 def regenerate(repo: Repo, song_id: str, seed: str) -> Job:
     song = get_song(repo, song_id)
+    if seed == "same" and song.seed is None:
+        raise ApiError("conflict", "This song has no recorded seed; use Variation instead.")
     engine = song.spec.engine.model_copy(update={"seed": song.seed if seed == "same" else None})
     # the song's current title, so a rename carries into its regenerations
     return jobs.resubmit(repo, song.spec.model_copy(update={"engine": engine, "title": song.title}))
@@ -105,4 +107,4 @@ def delete_preset(repo: Repo, preset_id: str) -> None:
 
 
 def _clean(body: PresetIn) -> BuilderSpec:
-    return body.spec.model_copy(update={"client_job_id": None})
+    return body.spec.model_copy(update={"client_job_id": None, "preset_id": None})

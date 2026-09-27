@@ -2,7 +2,7 @@
 import { useRef, useState, type Dispatch, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, GripVertical, Plus, Save, Trash2, Upload, X } from 'lucide-react'
 import { api } from '../../api/client'
-import type { BuilderSpec, Catalog, Frequency, Level, Role } from '../../api/types'
+import type { BuilderSpec, Catalog, Frequency, Level, Role, TimeSignature } from '../../api/types'
 import { AsyncView } from '../../components/AsyncView'
 import { FieldSeg } from '../../components/FieldSeg'
 import { useAsync, useMutation } from '../../lib/async'
@@ -303,7 +303,7 @@ export function MusicPanel({ spec, dispatch, catalog, errors }: PanelProps) {
       </div>
       <FieldSeg label="Time signature" options={['auto', ...catalog.time_signatures]} value={m.time_signature ?? 'auto'}
         format={t => (t === 'auto' ? 'Auto' : `${t}/4`)}
-        onChange={t => patch({ time_signature: t === 'auto' ? null : t })} />
+        onChange={t => patch({ time_signature: t === 'auto' ? null : t as TimeSignature })} />
     </Panel>
   )
 }
@@ -338,10 +338,10 @@ export function LyricsPanel({ spec, dispatch, errors }: PanelProps) {
       <label className="field field--inline">
         <span className="label">Repeat lyrics</span>
         <input className="input input--narrow" type="number" inputMode="numeric" min={1} max={1000} placeholder="Off"
-          value={spec.lyrics.repeat ?? ''} aria-invalid={errors.repeat ? true : undefined} aria-describedby="repeat-help"
+          value={spec.lyrics.repeat ?? ''} aria-invalid={errors.repeat || errors.lyrics ? true : undefined} aria-describedby="repeat-help"
           onChange={e => patch({ repeat: numberOrNull(e.target.value) })} />
-        <span id="repeat-help" className={errors.repeat ? 'field__error' : 'field__help'}>
-          {errors.repeat ?? 'Writes the lyrics out this many times, one per line. The sung count is approximate.'}
+        <span id="repeat-help" className={errors.repeat || errors.lyrics ? 'field__error' : 'field__help'}>
+          {errors.repeat ?? errors.lyrics ?? 'Writes the lyrics out this many times, one per line. The sung count is approximate.'}
         </span>
       </label>
     </Panel>
@@ -444,7 +444,7 @@ export function PresetPanel({ spec, onLoad }: { spec: BuilderSpec; onLoad: (s: B
                     {builtin.length > 0 && <optgroup label="Starter">{builtin.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
                     {mine.length > 0 && <optgroup label="Yours">{mine.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
                   </select>
-                  <button type="button" className="btn btn--ghost" disabled={!selected || busy} onClick={() => selected && onLoad(selected.spec)}>
+                  <button type="button" className="btn btn--ghost" disabled={!selected || busy} onClick={() => selected && onLoad({ ...selected.spec, preset_id: selected.id })}>
                     <Upload size={16} aria-hidden /> Load
                   </button>
                 </div>

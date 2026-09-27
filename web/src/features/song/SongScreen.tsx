@@ -60,7 +60,8 @@ function SongDetail({ song, onChange }: { song: Song; onChange: (s: Song) => voi
           <ShareButton title={song.title} />
         </div>
         <div className="row">
-          <button type="button" className="btn btn--ghost" disabled={regen.state.status === 'loading'} onClick={() => onRegen('same')}>
+          <button type="button" className="btn btn--ghost" disabled={regen.state.status === 'loading' || song.seed === null}
+            title={song.seed === null ? 'No seed was recorded for this song; use Variation.' : undefined} onClick={() => onRegen('same')}>
             <RefreshCw size={16} aria-hidden /> Regenerate
           </button>
           <button type="button" className="btn btn--ghost" disabled={regen.state.status === 'loading'} onClick={() => onRegen('new')}>

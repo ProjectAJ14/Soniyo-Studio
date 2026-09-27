@@ -36,6 +36,7 @@ mirror: `web/src/api/types.ts`. Field names are identical (snake_case) on both.
 ```json
 {
   "client_job_id": "uuid, required on POST /jobs, ignored elsewhere",
+  "preset_id": "id of the preset this spec was loaded from | null (becomes song.preset_id; dropped when saved as a preset)",
   "title": "Om Namah Shivaya",
   "theme": {"deity": "Shiva", "form": "mantra chant"},
   "style": "Deeply peaceful Shiva mantra meditation",
@@ -65,6 +66,10 @@ mirror: `web/src/api/types.ts`. Field names are identical (snake_case) on both.
 ```
 
 Validation: `bpm` 30–300 or null; `total_seconds` 10–600; `repeat` 1–1000 or null;
+`time_signature` one of `2 3 4 6` or null; lengths: `lyrics.text` ≤ 20000 and
+`len(lyrics.text) × repeat` ≤ 50000, `vocals.notes` ≤ 2000, `caption_override` ≤ 5000,
+`style` ≤ 2000, `title` ≤ 200, `client_job_id`/`preset_id`/`theme.*` ≤ 100, `music.key` ≤ 40,
+`moods`/`avoid`/`vocals.character` ≤ 40 items of ≤ 80 chars, `instruments` ≤ 40;
 `length.mode` is `single` in v1 (`loop` → 422 `validation_failed`, v1.1).
 Every field except `client_job_id` on `/jobs` has a default, so `{}` compiles.
 `engine.caption_override` (expert toggle, F9) replaces the compiled caption verbatim.
@@ -188,7 +193,7 @@ Bare `GET /health` (no or bad token) returns only `{"status": "ok", "version": "
 | PATCH | `/songs/{id}` | `{"title"?: str, "favourite"?: bool}` → Song |
 | DELETE | `/songs/{id}` | → 204, removes audio files |
 | GET | `/songs/{id}/audio?format=mp3\|flac&download=1` | audio bytes, honours `Range` (206) |
-| POST | `/songs/{id}/regenerate` | `{"seed": "same" \| "new"}` → 202 Job |
+| POST | `/songs/{id}/regenerate` | `{"seed": "same" \| "new"}` → 202 Job (409 `conflict` for `same` when `song.seed` is null) |
 | GET | `/presets` | → `{"items": [Preset]}` builtin first |
 | POST | `/presets` | `{"name", "spec"}` → 201 Preset |
 | GET | `/presets/{id}` | → Preset |

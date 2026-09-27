@@ -29,8 +29,12 @@ export interface Instrument {
   frequency: Frequency | null
 }
 
+export type TimeSignature = '2' | '3' | '4' | '6'
+
 export interface BuilderSpec {
   client_job_id?: string | null
+  /** The preset this spec was loaded from; becomes song.preset_id. */
+  preset_id?: string | null
   title: string
   theme: { deity: string | null; form: string | null }
   style: string
@@ -45,7 +49,7 @@ export interface BuilderSpec {
   instruments: Instrument[]
   ambience: { reverb: Reverb; space: Space; dynamics: Dynamics }
   avoid: string[]
-  music: { bpm: number | null; key: string | null; time_signature: string | null }
+  music: { bpm: number | null; key: string | null; time_signature: TimeSignature | null }
   lyrics: { text: string; repeat: number | null }
   length: { mode: 'single'; total_seconds: number }
   engine: {

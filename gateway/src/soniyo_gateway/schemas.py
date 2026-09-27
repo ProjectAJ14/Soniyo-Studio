@@ -1,8 +1,8 @@
 """Wire types for /api/v1. Mirror of docs/api-contract.md and web/src/api/types.ts."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 VocalType = Literal["none", "female", "male", "duet", "choir"]
 Delivery = Literal["chant", "sing", "hum"]
@@ -24,6 +24,10 @@ JobState = Literal[
     "cancelled",
 ]
 TERMINAL_STATES: frozenset[str] = frozenset({"succeeded", "failed", "cancelled"})
+MAX_COMPILED_LYRICS = 50_000  # characters after `repeat`; bounds memory, DB rows, engine input
+Short = Annotated[str, Field(max_length=100)]
+Chip = Annotated[str, Field(max_length=80)]
+Chips = Annotated[list[Chip], Field(default_factory=list, max_length=40)]
 
 
 class _Model(BaseModel):
@@ -31,16 +35,16 @@ class _Model(BaseModel):
 
 
 class Theme(_Model):
-    deity: str | None = None
-    form: str | None = None
+    deity: Short | None = None
+    form: Short | None = None
 
 
 class Vocals(_Model):
     type: VocalType = "female"
-    character: list[str] = Field(default_factory=list)
+    character: Chips
     delivery: Delivery | None = "sing"
-    notes: str = ""
-    language: str | None = None
+    notes: str = Field(default="", max_length=2000)
+    language: str | None = Field(default=None, max_length=20)
 
 
 class Instrument(_Model):
@@ -58,13 +62,19 @@ class Ambience(_Model):
 
 class Music(_Model):
     bpm: int | None = Field(default=None, ge=30, le=300)
-    key: str | None = None
-    time_signature: str | None = None
+    key: str | None = Field(default=None, max_length=40)
+    time_signature: Literal["2", "3", "4", "6"] | None = None
 
 
 class Lyrics(_Model):
-    text: str = ""
+    text: str = Field(default="", max_length=20_000)
     repeat: int | None = Field(default=None, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def _bounded(self) -> "Lyrics":
+        if len(self.text.strip()) * (self.repeat or 1) > MAX_COMPILED_LYRICS:
+            raise ValueError(f"lyrics x repeat must stay under {MAX_COMPILED_LYRICS} characters")
+        return self
 
 
 class Length(_Model):
@@ -77,19 +87,20 @@ class EngineOptions(_Model):
     keep_caption: bool = False
     seed: int | None = None
     lm_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    caption_override: str | None = None
+    caption_override: str | None = Field(default=None, max_length=5000)
 
 
 class BuilderSpec(_Model):
-    client_job_id: str | None = None
+    client_job_id: Short | None = None
+    preset_id: Short | None = None  # the preset this spec was loaded from (library label, F20)
     title: str = Field(default="", max_length=200)
     theme: Theme = Field(default_factory=Theme)
     style: str = Field(default="", max_length=2000)
-    moods: list[str] = Field(default_factory=list)
+    moods: Chips
     vocals: Vocals = Field(default_factory=Vocals)
     instruments: list[Instrument] = Field(default_factory=list, max_length=40)
     ambience: Ambience = Field(default_factory=Ambience)
-    avoid: list[str] = Field(default_factory=list)
+    avoid: Chips
     music: Music = Field(default_factory=Music)
     lyrics: Lyrics = Field(default_factory=Lyrics)
     length: Length = Field(default_factory=Length)

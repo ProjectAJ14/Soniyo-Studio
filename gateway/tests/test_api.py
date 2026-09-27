@@ -213,3 +213,34 @@ def test_json_logging(tmp_path: Path) -> None:
             h.close()
         root.handlers[:] = handlers
         root.setLevel(level)
+
+
+def test_spec_size_limits(client: TestClient) -> None:
+    for bad in (
+        {"lyrics": {"text": "x" * 100, "repeat": 1000}},  # 100k chars once repeated
+        {"lyrics": {"text": "x" * 20_001}},
+        {"moods": ["x" * 81]},
+        {"music": {"time_signature": "banana"}},
+        {"client_job_id": "x" * 101},
+    ):
+        r = client.post("/api/v1/compile", json=bad)
+        assert r.status_code == 422 and r.json()["error"]["code"] == "validation_failed", bad
+    ok = client.post("/api/v1/compile", json={"lyrics": {"text": "om " * 16, "repeat": 1000}})
+    assert ok.status_code == 200
+
+
+def test_preset_id_reaches_song_not_preset(client: TestClient) -> None:
+    job = wait_state(client, submit(client, "from-preset", preset_id="p-shiva")["id"], "succeeded")
+    assert client.get(f"/api/v1/songs/{job['song_id']}").json()["preset_id"] == "p-shiva"
+    p = client.post("/api/v1/presets", json={"name": "n", "spec": {"preset_id": "p-shiva"}})
+    assert p.json()["spec"]["preset_id"] is None
+
+
+def test_regenerate_same_without_seed_conflicts(client: TestClient) -> None:
+    job = wait_state(client, submit(client, "noseed")["id"], "succeeded")
+    repo = client.app.state.rt.repo
+    repo.update_song(job["song_id"], seed=None)
+    r = client.post(f"/api/v1/songs/{job['song_id']}/regenerate", json={"seed": "same"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "conflict"
+    r = client.post(f"/api/v1/songs/{job['song_id']}/regenerate", json={"seed": "new"})
+    assert r.status_code == 202
