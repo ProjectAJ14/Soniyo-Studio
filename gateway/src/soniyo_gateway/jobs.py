@@ -10,6 +10,9 @@ from .repo import Repo
 from .schemas import TERMINAL_STATES, BuilderSpec, Job
 
 DEFAULT_FACTOR = 1.0  # generate seconds per second of audio, before any history exists
+# ponytail: the engine's avg_job_seconds carries no durations, so it is scaled as if its jobs
+# were 5-minute songs (the Milestone 0 baseline); only a prior until our own history exists.
+STATS_REFERENCE_SECONDS = 300.0
 
 
 def _ts(s: str) -> datetime:
@@ -21,8 +24,9 @@ def title_for(spec: BuilderSpec) -> str:
 
 
 def factor(repo: Repo) -> float:
-    """Generate seconds per second of audio: from succeeded-job history, else 1."""
-    return repo.generate_seconds_per_audio_second() or DEFAULT_FACTOR
+    """Generate seconds per second of audio: succeeded-job history, else the engine's
+    /v1/stats prior, else 1."""
+    return repo.generate_seconds_per_audio_second() or repo.engine_factor or DEFAULT_FACTOR
 
 
 def _elapsed(d: dict) -> float | None:

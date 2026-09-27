@@ -117,3 +117,12 @@ async def test_errors_map_to_api_errors() -> None:
     with pytest.raises(ApiError) as err:
         await dead.submit(params())
     assert err.value.code == "engine_unavailable" and err.value.retryable
+
+
+async def test_avg_job_seconds_from_stats() -> None:
+    seen: list[httpx.Request] = []
+    assert await engine({"/v1/stats": (200, fixture("stats"))}, seen).avg_job_seconds() == 8.5
+    assert seen[0].method == "GET"
+    assert await engine({"/v1/stats": (503, {})}, []).avg_job_seconds() is None
+    empty = {"data": {"avg_job_seconds": 0}, "code": 200}
+    assert await engine({"/v1/stats": (200, empty)}, []).avg_job_seconds() is None

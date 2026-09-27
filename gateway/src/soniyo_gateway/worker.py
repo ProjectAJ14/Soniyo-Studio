@@ -259,6 +259,9 @@ async def watchdog(rt: Runtime) -> None:
                 log.info("engine healthy models=%s", models)
                 rt.repo.hub.wake.set()
             h.status, h.models, h.failures = "ok", models, 0
+            with contextlib.suppress(Exception):  # a prior only: never let it hurt the watchdog
+                if avg := await rt.engine.avg_job_seconds():
+                    rt.repo.engine_factor = avg / jobs.STATS_REFERENCE_SECONDS
         else:
             h.failures += 1
             h.last_error = err

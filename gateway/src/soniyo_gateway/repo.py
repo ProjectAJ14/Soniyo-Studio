@@ -75,6 +75,7 @@ class Repo:
         # Sync routes run in a threadpool and share this one connection with the worker;
         # sqlite3 connections are not safe for concurrent use, so every statement is serialised.
         self._lock = threading.Lock()
+        self.engine_factor: float | None = None  # prior from the engine's /v1/stats (watchdog)
 
     def _execute(self, sql: str, args: Any = ()) -> _Result:
         with self._lock:

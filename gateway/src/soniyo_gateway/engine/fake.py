@@ -58,6 +58,9 @@ class FakeEngine:
     async def health(self) -> tuple[bool, list[str], str | None]:
         return (True, ["fake"], None) if self.healthy else (False, [], "Fake engine is down.")
 
+    async def avg_job_seconds(self) -> float | None:
+        return None
+
     async def format_input(self, params: EngineParams) -> Formatted:
         if self.format_fails:
             raise ApiError("internal", "Fake format_input failed.")

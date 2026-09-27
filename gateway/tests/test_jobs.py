@@ -36,3 +36,11 @@ async def test_queued_eta_includes_running_remainder_and_jobs_ahead(repo: Repo) 
     assert only_b.id == b and 189 <= only_b.estimate_seconds_left <= 190
     assert jobs.get(repo, b).estimate_seconds_left == pytest.approx(
         view[b].estimate_seconds_left, abs=1.5)  # fmt: skip
+
+
+async def test_engine_prior_only_without_history(repo: Repo) -> None:
+    job = add(repo, "q", 100)
+    repo.engine_factor = 0.5
+    assert jobs.get(repo, job).estimate_seconds_left == 50
+    repo.generate_seconds_per_audio_second = lambda: 0.2  # own history wins
+    assert jobs.get(repo, job).estimate_seconds_left == 20

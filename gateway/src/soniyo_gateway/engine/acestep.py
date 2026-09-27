@@ -25,7 +25,8 @@ POST /format_input {prompt, lyrics, temperature, param_obj: JSON string of
     {duration, bpm, key, time_signature, language}} -> data {caption, lyrics, bpm,
     key_scale, time_signature, duration, vocal_language} -> Formatted
 
-GET /v1/stats is not used: time-left comes from the gateway's own history (jobs.py).
+GET /v1/stats data.avg_job_seconds  -> avg_job_seconds() (None on any failure or 0); the
+    watchdog caches it as the time-left prior until the gateway has its own history (jobs.py).
 """
 
 import json
@@ -125,6 +126,14 @@ class AceStepEngine:
             return False, [], e.message
         names = [m["name"] for m in (models or {}).get("models", []) if "name" in m]
         return True, names, None
+
+    async def avg_job_seconds(self) -> float | None:
+        try:
+            data = await self._call("GET", "/v1/stats", wait=10.0)
+        except ApiError:
+            return None
+        avg = data.get("avg_job_seconds") if isinstance(data, dict) else None
+        return float(avg) if isinstance(avg, int | float) and avg > 0 else None
 
     async def format_input(self, params: EngineParams) -> Formatted:
         meta = {"duration": params.audio_duration, "language": params.vocal_language or None}
