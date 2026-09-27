@@ -13,6 +13,7 @@ import {
   AdvancedPanel, AmbiencePanel, AvoidPanel, InstrumentsPanel, LengthPanel, LyricsPanel, MusicPanel,
   PresetPanel, StylePanel, VocalsPanel,
 } from './panels'
+import { useConnection } from '../server/connection'
 import { specReducer, validateSpec } from './specReducer'
 import './create.css'
 
@@ -45,8 +46,10 @@ export function CreateScreen() {
   const submission = useRef<{ spec: BuilderSpec; id: string } | null>(null)
   const generate = useMutation((body: BuilderSpec & { client_job_id: string }) => api.createJob(body))
   const submitting = generate.state.status === 'loading'
+  // PRD: while the Mac is unreachable the builder keeps working; nothing is submitted.
+  const offline = useConnection().status === 'unreachable'
   const onGenerate = async () => {
-    if (invalid || submitting) return
+    if (invalid || submitting || offline) return
     if (submission.current?.spec !== spec) submission.current = { spec, id: crypto.randomUUID() }
     const job = await generate.mutate({ ...spec, client_job_id: submission.current.id })
     if (job) {
@@ -99,10 +102,16 @@ export function CreateScreen() {
               {invalid ? 'Preview paused' : compiled.state.status === 'loading' ? 'Updating preview…'
                 : compiled.state.status === 'error' ? 'Preview unavailable' : caption || 'Empty caption'}
             </p>
-            <button type="button" className="btn btn--brand btn--block" onClick={onGenerate} disabled={invalid || submitting}>
+            <button type="button" className="btn btn--brand btn--block" onClick={onGenerate} disabled={invalid || submitting || offline}
+              aria-describedby={offline ? 'go-offline' : undefined}>
               {submitting ? <Loader2 size={16} className="spin" aria-hidden /> : <Sparkles size={16} aria-hidden />}
               {submitting ? 'Sending…' : genError ? 'Try again' : 'Generate'}
             </button>
+            {offline && (
+              <p id="go-offline" className="field__error" role="status">
+                Your Mac is unreachable. Keep building; Generate works again once it answers.
+              </p>
+            )}
             {invalid && <p className="field__error">Fix the highlighted fields first.</p>}
             {genError && (
               <p className="field__error" role="alert">

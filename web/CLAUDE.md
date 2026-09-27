@@ -15,7 +15,7 @@ to the gateway through `src/api/client.ts`. Contract: `../docs/api-contract.md`.
 | `src/styles/` | `tokens.css` (Eklavya, copied — do not edit roles without mirroring both grounds), `base.css` (recipes) |
 
 Features import from `api`, `lib`, `components` — never from another feature, except
-`player` (`usePlayer`) and `queue` (`useActiveJobCount`), which are app-wide.
+`player` (`usePlayer`), `queue` (`useActiveJobCount`) and `server` (`useConnection`), which are app-wide.
 
 ## State pattern (mandatory)
 

@@ -12,6 +12,9 @@ vi.mock('../../api/client', async orig => {
   }
 })
 
+const connection = vi.hoisted(() => ({ status: 'online' }))
+vi.mock('../server/connection', () => ({ useConnection: () => connection }))
+
 const { api } = await import('../../api/client')
 const { CreateScreen } = await import('./CreateScreen')
 
@@ -54,7 +57,7 @@ beforeEach(() => {
   vi.mocked(api.compile).mockResolvedValue(compiled('calm female vocal'))
   location.hash = '#/create'
 })
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); connection.status = 'online' })
 
 describe('CreateScreen', () => {
   it('compile preview renders loading, then success, then error', async () => {
@@ -69,6 +72,18 @@ describe('CreateScreen', () => {
     vi.mocked(api.compile).mockRejectedValueOnce(new ApiError('api', 'internal', 'Compiler exploded', true, 500))
     await userEvent.type(await screen.findByLabelText('Title'), 'x')
     expect(await screen.findByText('Compiler exploded', {}, { timeout: 2000 })).toBeInTheDocument()
+  })
+
+  it('while the Mac is unreachable Generate is held back but the builder still works', async () => {
+    connection.status = 'unreachable'
+    render(<CreateScreen />)
+    const btn = await screen.findByRole('button', { name: 'Generate' })
+    expect(btn).toBeDisabled()
+    expect(screen.getByText(/Your Mac is unreachable. Keep building/)).toBeInTheDocument()
+    await userEvent.type(await screen.findByLabelText('Title'), 'Om')
+    expect(screen.getByLabelText('Title')).toHaveValue('Om')
+    await userEvent.click(btn)
+    expect(api.createJob).not.toHaveBeenCalled()
   })
 
   it('the Generate bar carries a one-line caption status', async () => {
