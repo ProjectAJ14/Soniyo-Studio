@@ -1,5 +1,7 @@
 """The one error shape: {"error": {code, message, retryable}}. See docs/api-contract.md."""
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -57,5 +59,8 @@ def install(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        logging.getLogger(__name__).error(
+            "unhandled %s %s", request.method, request.url.path, exc_info=exc
+        )
         return _json(ApiError("internal", "Unexpected gateway error. Check the gateway log."))

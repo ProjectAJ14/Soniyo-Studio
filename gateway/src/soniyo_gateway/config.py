@@ -26,6 +26,10 @@ class Settings:
     web_dist: Path | None = None
     low_disk_bytes: int = 10 * 1024**3
     health_fail_threshold: int = 3
+    health_poll_seconds: float = 20.0
+    fake_seconds: float = 5.0
+    engine_restart_cmd: str = ""
+    log_dir: Path = field(default_factory=lambda: Path.home() / "Library" / "Logs" / "AceStudio")
 
     @property
     def db_path(self) -> Path:
@@ -56,4 +60,9 @@ class Settings:
             dit_model=env.get("SONIYO_DIT_MODEL", "acestep-v15-turbo"),
             lm_model=env.get("SONIYO_LM_MODEL", "acestep-5Hz-lm-0.6B"),
             web_dist=Path(web_dist) if web_dist else None,
+            fake_seconds=float(env.get("SONIYO_FAKE_SECONDS", "5")),
+            engine_restart_cmd=env.get("SONIYO_ENGINE_RESTART_CMD", ""),
+            log_dir=Path(
+                env.get("SONIYO_LOG_DIR", str(Path.home() / "Library" / "Logs" / "AceStudio"))
+            ).expanduser(),
         )
