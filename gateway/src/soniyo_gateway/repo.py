@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import threading
 from typing import Any
 
 from .db import now
@@ -52,15 +53,36 @@ def _preset(row: sqlite3.Row) -> Preset:
     )
 
 
+class _Result:
+    """Rows fetched while the lock was held, so no cursor outlives it."""
+
+    def __init__(self, cur: sqlite3.Cursor):
+        self.rows = cur.fetchall()
+        self.rowcount = cur.rowcount
+
+    def fetchone(self) -> sqlite3.Row | None:
+        return self.rows[0] if self.rows else None
+
+    def __iter__(self):  # noqa: ANN204
+        return iter(self.rows)
+
+
 class Repo:
     def __init__(self, conn: sqlite3.Connection, hub: Hub):
         self.conn = conn
         self.hub = hub
+        # Sync routes run in a threadpool and share this one connection with the worker;
+        # sqlite3 connections are not safe for concurrent use, so every statement is serialised.
+        self._lock = threading.Lock()
+
+    def _execute(self, sql: str, args: Any = ()) -> _Result:
+        with self._lock:
+            return _Result(self.conn.execute(sql, args))
 
     # ---- jobs -------------------------------------------------------------------------
 
     def insert_job(self, id: str, client_job_id: str, title: str, spec: BuilderSpec) -> None:
-        self.conn.execute(
+        self._execute(
             "INSERT INTO jobs(id, client_job_id, title, state, spec, created_at)"
             " VALUES (?, ?, ?, 'queued', ?, ?)",
             (id, client_job_id, title, spec.model_dump_json(), now()),
@@ -68,11 +90,11 @@ class Repo:
         self.hub.publish(id)
 
     def get_job(self, id: str) -> dict | None:
-        row = self.conn.execute("SELECT * FROM jobs WHERE id = ?", (id,)).fetchone()
+        row = self._execute("SELECT * FROM jobs WHERE id = ?", (id,)).fetchone()
         return _job(row) if row else None
 
     def get_job_by_client_id(self, client_job_id: str) -> dict | None:
-        row = self.conn.execute(
+        row = self._execute(
             "SELECT * FROM jobs WHERE client_job_id = ?", (client_job_id,)
         ).fetchone()
         return _job(row) if row else None
@@ -83,14 +105,14 @@ class Repo:
             sql += f" WHERE state IN ({','.join('?' * len(states))})"
             args += states
         sql += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
-        return [_job(r) for r in self.conn.execute(sql, [*args, limit])]
+        return [_job(r) for r in self._execute(sql, [*args, limit])]
 
     def jobs_in_states(self, states: list[str]) -> list[dict]:
         q = f"SELECT * FROM jobs WHERE state IN ({','.join('?' * len(states))}) ORDER BY created_at"
-        return [_job(r) for r in self.conn.execute(q, states)]
+        return [_job(r) for r in self._execute(q, states)]
 
     def queued_ids(self) -> list[str]:
-        rows = self.conn.execute(
+        rows = self._execute(
             "SELECT id FROM jobs WHERE state = 'queued' ORDER BY created_at, rowid"
         )
         return [r[0] for r in rows]
@@ -103,14 +125,14 @@ class Repo:
         if only_from:
             sql += f" AND state IN ({','.join('?' * len(only_from))})"
             args += only_from
-        changed = self.conn.execute(sql, args).rowcount > 0
+        changed = self._execute(sql, args).rowcount > 0
         if changed:
             self.hub.publish(id)
         return changed
 
     def generate_seconds_per_audio_second(self) -> float | None:
         """Running average of generate time / requested duration over succeeded jobs."""
-        row = self.conn.execute(
+        row = self._execute(
             "SELECT AVG(json_extract(timings, '$.generate')"
             "   / json_extract(spec, '$.length.total_seconds'))"
             " FROM jobs WHERE state = 'succeeded' AND json_extract(timings, '$.generate') > 0"
@@ -120,7 +142,7 @@ class Repo:
     # ---- songs ------------------------------------------------------------------------
 
     def insert_song(self, song: Song, flac_path: str, mp3_path: str) -> None:
-        self.conn.execute(
+        self._execute(
             "INSERT INTO songs(id, job_id, title, created_at, duration_seconds, favourite,"
             " preset_id, spec, compiled, seed, engine_info, flac_path, mp3_path, size_bytes)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -131,11 +153,11 @@ class Repo:
         )  # fmt: skip
 
     def get_song(self, id: str) -> Song | None:
-        row = self.conn.execute("SELECT * FROM songs WHERE id = ?", (id,)).fetchone()
+        row = self._execute("SELECT * FROM songs WHERE id = ?", (id,)).fetchone()
         return _song(row) if row else None
 
     def song_paths(self, id: str) -> tuple[str, str] | None:
-        row = self.conn.execute(
+        row = self._execute(
             "SELECT flac_path, mp3_path FROM songs WHERE id = ?", (id,)
         ).fetchone()
         return (row[0], row[1]) if row else None
@@ -153,24 +175,26 @@ class Repo:
             sql += " AND favourite = ?"
             args.append(int(favourite))
         sql += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
-        return [_song(r) for r in self.conn.execute(sql, [*args, limit])]
+        return [_song(r) for r in self._execute(sql, [*args, limit])]
 
     def update_song(self, id: str, **fields: Any) -> None:
         if fields:
             cols = ", ".join(f"{k} = ?" for k in fields)
-            self.conn.execute(f"UPDATE songs SET {cols} WHERE id = ?", [*fields.values(), id])
+            self._execute(f"UPDATE songs SET {cols} WHERE id = ?", [*fields.values(), id])
 
     def delete_song(self, id: str) -> None:
-        self.conn.execute("DELETE FROM songs WHERE id = ?", (id,))
+        # the job keeps its history but must not point at a gone song
+        self._execute("UPDATE jobs SET song_id = NULL WHERE song_id = ?", (id,))
+        self._execute("DELETE FROM songs WHERE id = ?", (id,))
 
     def library_bytes(self) -> int:
-        return self.conn.execute("SELECT COALESCE(SUM(size_bytes), 0) FROM songs").fetchone()[0]
+        return self._execute("SELECT COALESCE(SUM(size_bytes), 0) FROM songs").fetchone()[0]
 
     # ---- presets ----------------------------------------------------------------------
 
     def upsert_builtin_preset(self, id: str, name: str, spec: BuilderSpec) -> None:
         ts = now()
-        self.conn.execute(
+        self._execute(
             "INSERT INTO presets(id, name, builtin, spec, created_at, updated_at)"
             " VALUES (?, ?, 1, ?, ?, ?)"
             " ON CONFLICT(id) DO UPDATE SET name = excluded.name, spec = excluded.spec,"
@@ -181,27 +205,27 @@ class Repo:
 
     def insert_preset(self, id: str, name: str, spec: BuilderSpec) -> None:
         ts = now()
-        self.conn.execute(
+        self._execute(
             "INSERT INTO presets(id, name, builtin, spec, created_at, updated_at)"
             " VALUES (?, ?, 0, ?, ?, ?)",
             (id, name, spec.model_dump_json(), ts, ts),
         )
 
     def get_preset(self, id: str) -> Preset | None:
-        row = self.conn.execute("SELECT * FROM presets WHERE id = ?", (id,)).fetchone()
+        row = self._execute("SELECT * FROM presets WHERE id = ?", (id,)).fetchone()
         return _preset(row) if row else None
 
     def list_presets(self) -> list[Preset]:
-        rows = self.conn.execute(
+        rows = self._execute(
             "SELECT * FROM presets ORDER BY builtin DESC, created_at, name"
         )
         return [_preset(r) for r in rows]
 
     def update_preset(self, id: str, name: str, spec: BuilderSpec) -> None:
-        self.conn.execute(
+        self._execute(
             "UPDATE presets SET name = ?, spec = ?, updated_at = ? WHERE id = ?",
             (name, spec.model_dump_json(), now(), id),
         )
 
     def delete_preset(self, id: str) -> None:
-        self.conn.execute("DELETE FROM presets WHERE id = ?", (id,))
+        self._execute("DELETE FROM presets WHERE id = ?", (id,))

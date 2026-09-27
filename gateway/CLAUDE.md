@@ -17,7 +17,7 @@ Contract: `../docs/api-contract.md`. Runs one job at a time.
 | Service | `audio.py` | ffmpeg FLAC→MP3, duration probe, Range file responses |
 | Pure | `compiler.py`, `catalog.py` | Spec → caption/params; catalogue + built-in presets |
 | Adapter | `engine/` | `Engine` protocol, `AceStepEngine` (HTTP), `FakeEngine` (dev/tests) |
-| Data | `db.py`, `repo.py`, `migrations/` | SQLite WAL, forward-only SQL migrations, all SQL |
+| Data | `db.py`, `repo.py`, `migrations/` | SQLite WAL, forward-only SQL migrations, all SQL (one connection, every statement under `Repo._lock`: sync routes run in threads) |
 
 ## States
 
@@ -28,4 +28,5 @@ Engine health is tracked as `ok | down | unknown` with `last_error`.
 ## Checks
 
 `uv run pytest -q && uv run ruff check .` — tests use `FakeEngine` + tmp data dir,
-never the network, never `~/AceStudio`.
+never the network, never `~/AceStudio`. `tests/test_e2e_http.py` spawns a real
+uvicorn on a free 127.0.0.1 port (fake engine, needs ffmpeg) and drives the HTTP flow.
