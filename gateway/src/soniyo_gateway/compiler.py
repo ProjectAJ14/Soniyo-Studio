@@ -139,9 +139,9 @@ def compile_spec(spec: BuilderSpec, *, lm_cap_seconds: int) -> CompileResult:
         lm_negative_prompt=negative,
         bpm=spec.music.bpm,
         key_scale=spec.music.key or "",
-        time_signature=spec.music.time_signature or "4",
+        time_signature=spec.music.time_signature or "",  # "" = Auto: the LM/engine picks
         audio_duration=total,
-        vocal_language="unknown" if spec.vocals.type == "none" else spec.vocals.language or "en",
+        vocal_language="unknown" if spec.vocals.type == "none" else spec.vocals.language or "",
         thinking=thinking,
         use_cot_caption=not eng.keep_caption,
         seed=-1 if eng.seed is None else eng.seed,

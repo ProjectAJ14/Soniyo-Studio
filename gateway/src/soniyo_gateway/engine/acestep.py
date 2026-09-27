@@ -4,11 +4,11 @@ Every response is wrapped: {"data": ..., "code": 200, "error": null, "timestamp"
 Auth: `Authorization: Bearer ACESTEP_API_KEY`.
 
 EngineParams -> POST /release_task (JSON):
-    prompt, lyrics, lm_negative_prompt, key_scale, time_signature, audio_duration,
+    prompt, lyrics, lm_negative_prompt, key_scale, audio_duration,
     thinking, use_cot_caption, lm_temperature, batch_size, inference_steps, audio_format
                                      -> same names
     bpm (None)                       -> omitted, so the LM/engine fills it
-    vocal_language ("")              -> omitted (engine default)
+    time_signature / vocal_language ("") -> omitted (Auto: engine/LM decides)
     seed < 0                         -> use_random_seed=true (seed omitted)
     seed >= 0                        -> use_random_seed=false, seed=<seed>
     response data.task_id            -> task id
@@ -150,6 +150,7 @@ class AceStepEngine:
             bpm=int(bpm) if isinstance(bpm, int | float) and bpm else None,
             key_scale=str(data.get("key_scale") or ""),
             time_signature=str(data.get("time_signature") or ""),
+            vocal_language=str(data.get("vocal_language") or ""),
         )
 
 
@@ -159,7 +160,6 @@ def release_body(p: EngineParams) -> dict:
         "lyrics": p.lyrics,
         "lm_negative_prompt": p.lm_negative_prompt,
         "key_scale": p.key_scale,
-        "time_signature": p.time_signature,
         "audio_duration": p.audio_duration,
         "thinking": p.thinking,
         "use_cot_caption": p.use_cot_caption,
@@ -173,6 +173,8 @@ def release_body(p: EngineParams) -> dict:
         body["seed"] = p.seed
     if p.bpm is not None:
         body["bpm"] = p.bpm
+    if p.time_signature:
+        body["time_signature"] = p.time_signature
     if p.vocal_language:
         body["vocal_language"] = p.vocal_language
     return body

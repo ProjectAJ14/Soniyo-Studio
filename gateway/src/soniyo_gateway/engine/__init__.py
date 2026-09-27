@@ -25,6 +25,7 @@ class Formatted:
     bpm: int | None = None
     key_scale: str = ""
     time_signature: str = ""
+    vocal_language: str = ""
 
 
 class Engine(Protocol):

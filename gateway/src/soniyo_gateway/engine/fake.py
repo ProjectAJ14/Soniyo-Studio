@@ -67,6 +67,7 @@ class FakeEngine:
             bpm=params.bpm or 72,
             key_scale=params.key_scale or "D minor",
             time_signature=params.time_signature or "4",
+            vocal_language=params.vocal_language or "en",
         )
 
 

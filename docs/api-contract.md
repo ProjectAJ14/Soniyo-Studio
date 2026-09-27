@@ -69,6 +69,8 @@ Validation: `bpm` 30–300 or null; `total_seconds` 10–600; `repeat` 1–1000 
 Every field except `client_job_id` on `/jobs` has a default, so `{}` compiles.
 `engine.caption_override` (expert toggle, F9) replaces the compiled caption verbatim.
 `lyrics.repeat` writes the text out N times, one per line (approximate count).
+Auto (null) `music.time_signature` / `vocals.language` compile to `""` in `params`: the gateway
+omits them so the LM/engine decides (instrumental sends `vocal_language: "unknown"`).
 
 ### CompileResult (`POST /compile`, `job.compiled`)
 

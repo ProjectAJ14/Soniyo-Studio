@@ -240,6 +240,7 @@ def _merge(p: EngineParams, f: Formatted, *, keep_caption: bool) -> EngineParams
         "bpm": p.bpm or f.bpm,
         "key_scale": p.key_scale or f.key_scale,
         "time_signature": p.time_signature or f.time_signature,
+        "vocal_language": p.vocal_language or f.vocal_language,
     })  # fmt: skip
 
 

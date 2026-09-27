@@ -46,6 +46,10 @@ async def test_submit_maps_params_and_auth() -> None:
     assert body["audio_format"] == "flac" and body["use_random_seed"] is True
     assert "seed" not in body and "bpm" not in body and body["vocal_language"] == "sa"
     assert body["lm_negative_prompt"] == "EDM" and body["audio_duration"] == 600
+    assert body["time_signature"] == "4"
+    await e.submit(params(time_signature="", vocal_language=""))  # Auto: engine decides
+    auto = json.loads(seen[-1].content)
+    assert "time_signature" not in auto and "vocal_language" not in auto
 
     await e.submit(params(seed=42, bpm=60))
     body = json.loads(seen[1].content)

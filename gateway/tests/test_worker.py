@@ -78,6 +78,7 @@ def test_lm_text_pass_then_lm_off_render(settings: Settings, fake: FakeEngine) -
         sent = fake.submitted[-1]
         assert sent.thinking is False and sent.use_cot_caption is False
         assert sent.prompt.endswith(", planned") and sent.bpm == 72
+        assert sent.vocal_language == "en" and sent.time_signature == "4"  # filled by the LM
         assert job["compiled"]["params"]["bpm"] == 72
 
         fake.format_fails = True

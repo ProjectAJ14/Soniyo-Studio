@@ -75,7 +75,8 @@ def test_caption_override_is_verbatim():
 
 def test_empty_spec_compiles():
     r = compile_spec(BuilderSpec.model_validate({}), lm_cap_seconds=CAP)
-    assert r.caption and r.params.bpm is None and r.params.vocal_language == "en"
+    assert r.caption and r.params.bpm is None and r.params.vocal_language == ""
+    assert r.params.time_signature == ""  # Auto stays auto; the LM/engine decides
     assert r.params.audio_duration == 180 and r.lyrics == "" and r.notes == []
 
 
