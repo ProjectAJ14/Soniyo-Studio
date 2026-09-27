@@ -29,6 +29,7 @@ GET /v1/stats is not used: time-left comes from the gateway's own history (jobs.
 """
 
 import json
+import logging
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -37,6 +38,8 @@ import httpx
 from ..errors import ApiError
 from ..schemas import EngineParams
 from . import EngineResult, Formatted
+
+log = logging.getLogger(__name__)
 
 _STATUS = {0: "running", 1: "succeeded", 2: "failed"}
 
@@ -65,11 +68,15 @@ class AceStepEngine:
         except ValueError as e:
             raise ApiError("internal", f"Engine sent non-JSON (HTTP {r.status_code}).") from e
         if r.status_code >= 400:
+            # the detail can echo the whole request: log it, never hand it to clients
             detail = body.get("detail") if isinstance(body, dict) else None
-            raise ApiError("internal", f"Engine rejected {path} (HTTP {r.status_code}): {detail}")
+            log.warning("engine rejected %s HTTP %s: %.500s", path, r.status_code, detail)
+            raise ApiError("internal", f"The engine rejected the request (HTTP {r.status_code})."
+                           " See the gateway log.", False)  # fmt: skip
         if not isinstance(body, dict) or body.get("code", 200) != 200 or body.get("error"):
             err = body.get("error") if isinstance(body, dict) else None
-            raise ApiError("internal", f"Engine error on {path}: {err}")
+            log.warning("engine error on %s: %.500s", path, err)
+            raise ApiError("internal", "The engine reported an error. See the gateway log.")
         return body.get("data")
 
     async def submit(self, params: EngineParams) -> str:
@@ -111,7 +118,8 @@ class AceStepEngine:
         try:
             data = await self._call("GET", "/health", wait=10.0)
             if not isinstance(data, dict) or data.get("status") != "ok":
-                return False, [], f"Engine health says {data!r}"
+                log.warning("engine health says %.200r", data)
+                return False, [], "Engine health check did not report ok."
             models = await self._call("GET", "/v1/models", wait=10.0)
         except ApiError as e:
             return False, [], e.message

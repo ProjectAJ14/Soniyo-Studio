@@ -17,7 +17,7 @@ async def _run(*args: str) -> str:
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
     except FileNotFoundError as e:
-        raise ApiError("internal", f"{args[0]} is not installed on the Mac.") from e
+        raise ApiError("internal", f"{args[0]} is not installed on the Mac.", False) from e
     out, err = await proc.communicate()
     if proc.returncode != 0:
         raise ApiError("internal", f"{args[0]} failed: {err.decode(errors='replace')[-300:]}")

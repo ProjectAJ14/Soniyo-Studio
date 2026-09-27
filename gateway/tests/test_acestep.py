@@ -101,7 +101,8 @@ async def test_errors_map_to_api_errors() -> None:
     e = engine({"/release_task": (401, fixture("error_401")), "/health": (503, {})}, [])
     with pytest.raises(ApiError) as err:
         await e.submit(params())
-    assert err.value.code == "internal" and "Invalid API key" in err.value.message
+    assert err.value.code == "internal" and err.value.retryable is False
+    assert "Invalid API key" not in err.value.message  # engine detail stays in the log
     ok, _, msg = await e.health()
     assert ok is False and "503" in msg
 
