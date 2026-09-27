@@ -39,6 +39,17 @@ def test_cors_allow_and_deny(client: TestClient) -> None:
     assert "access-control-allow-origin" not in bad.headers
 
 
+def test_unhandled_error_is_json_with_cors(client: TestClient, monkeypatch) -> None:
+    def boom() -> int:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(client.app.state.rt.repo, "library_bytes", boom)
+    r = client.get("/api/v1/health", headers={"Origin": ORIGIN})
+    assert r.status_code == 500
+    assert r.json()["error"]["code"] == "internal"
+    assert r.headers["access-control-allow-origin"] == ORIGIN  # browser can read it
+
+
 def test_validation_error_shape(client: TestClient) -> None:
     r = client.post("/api/v1/jobs", json={"client_job_id": "x", "length": {"mode": "loop"}})
     assert r.status_code == 422 and r.json()["error"]["code"] == "validation_failed"
