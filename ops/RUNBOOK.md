@@ -122,8 +122,11 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 
 12. **Backups.** `local.acestudio.backup` runs `ops/bin/backup.sh` daily at 03:30: an
     online `sqlite3 .backup` into `SONIYO_BACKUP_DIR` (integrity-checked, newest 14
-    kept) and, on Sundays, `rsync -a ~/AceStudio/audio/` to `SONIYO_BACKUP_AUDIO_DEST`
-    (external drive or NAS; set it in `gateway.env`). Run it now:
+    kept) and, on Sundays, mirrors `~/AceStudio/audio/` to `SONIYO_BACKUP_AUDIO_DEST/audio`
+    (external drive or NAS; set it in `gateway.env`) with `rsync --delete`, so songs
+    deleted in the app leave the mirror too. Files deleted from the library are moved to
+    `SONIYO_BACKUP_AUDIO_DEST/audio-deleted/<YYYYMMDD>/` (newest 8 weeks kept), so a delete
+    stays recoverable for two months. Run it now:
     `ops/bin/backup.sh ~/AceStudio/config/gateway.env --audio`.
     Restore: stop the gateway (`sudo launchctl bootout system/local.acestudio.gateway`),
     copy a snapshot over `~/AceStudio/soniyo.sqlite3`, remove any `-wal`/`-shm` next to
