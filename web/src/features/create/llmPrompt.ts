@@ -31,8 +31,9 @@ export function buildConfigPrompt(c: Catalog, idea: string): string {
     engine: { lm: 'auto', keep_caption: true, seed: null, lm_temperature: null, caption_override: null },
   }
   return [
-    'You design settings for a devotional music generator (ACE-Step). Reply with ONE JSON object and nothing else:',
-    'no prose, no comments, no code fence. Use exactly this shape; "a | b" means pick one value.',
+    'You design settings for a devotional music generator (ACE-Step). Reply with ONE JSON object inside a single',
+    '```json code block, and nothing outside it: no prose, no comments in the JSON.',
+    'Use exactly this shape; "a | b" means pick one value.',
     '',
     JSON.stringify(shape, null, 2),
     '',

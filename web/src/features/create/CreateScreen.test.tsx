@@ -152,6 +152,7 @@ describe('CreateScreen', () => {
     const prompt = writeText.mock.calls[0][0]
     expect(prompt).toContain('tanpura: drone')
     expect(prompt).toContain('Shiva night chant')
+    expect(prompt).toContain('```json code block')
     expect(await screen.findByText(/Prompt copied/)).toBeInTheDocument()
 
     const spec = { ...emptySpec(), title: 'Night chant' }
