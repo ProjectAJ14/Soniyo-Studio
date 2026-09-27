@@ -95,7 +95,7 @@ Layout on the Mac (all created by `install.sh` or the steps below):
    Never enable Funnel.
 
 9. **iPad.** Install Tailscale from the App Store, join the same tailnet. Open the web app
-   (`https://<project>.web.app`), pair it with the `ts.net` URL and the owner token
+   (`https://soniyo-studio.web.app`), pair it with the `ts.net` URL and the owner token
    (`grep SONIYO_OWNER_TOKEN ~/AceStudio/config/gateway.env`), then Share → Add to Home
    Screen.
 
