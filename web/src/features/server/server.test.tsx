@@ -87,6 +87,32 @@ describe('ConnectionBanner', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 
+  it('any api call that cannot reach the Mac shows the banner at once, and a later success clears it', async () => {
+    const ok = { status: 'ok' as const, version: '1', engine: null, disk: { free_bytes: 1, total_bytes: 2, used_by_library_bytes: 0, low: false } }
+    vi.mocked(api.health).mockResolvedValue(ok)
+    // The unmocked client shares the connectivity listeners with the mocked module.
+    const real = await vi.importActual<typeof import('../../api/client')>('../../api/client')
+    setPairing({ baseUrl: 'https://mac.tail.ts.net', token: 't' })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'))
+    try {
+      render(<ConnectionProvider><ConnectionBanner /></ConnectionProvider>)
+      await waitFor(() => expect(api.health).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+
+      await expect(real.api.listSongs()).rejects.toMatchObject({ kind: 'unreachable' })
+      expect(await screen.findByText(/Is the Tailscale app connected/)).toBeInTheDocument()
+      expect(api.health).toHaveBeenCalledTimes(1) // no poll needed
+
+      fetchSpy.mockResolvedValue(json(200, { items: [] }))
+      await real.api.listSongs()
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+      expect(api.health).toHaveBeenCalledTimes(2) // recovery re-checks health
+    } finally {
+      fetchSpy.mockRestore()
+      setPairing(null)
+    }
+  })
+
   it('shows a gateway error, not the Tailscale banner, when the gateway answers with a failure', async () => {
     vi.mocked(api.health).mockRejectedValue(new ApiError('api', 'internal', 'disk', true, 500))
     render(<ConnectionProvider><ConnectionBanner /></ConnectionProvider>)

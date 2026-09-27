@@ -30,6 +30,16 @@ export function isProxyDown(status: number, data: unknown): boolean {
 }
 export const PROXY_DOWN_MESSAGE = "Your Mac's gateway isn't answering (it may be restarting). Wait a moment, then retry."
 
+/** Every request reports whether the Mac answered, so ConnectionProvider can react at once
+ * instead of waiting for its next /health poll. */
+type ConnectivityListener = (reachable: boolean) => void
+const connectivity = new Set<ConnectivityListener>()
+export function onConnectivity(fn: ConnectivityListener): () => void {
+  connectivity.add(fn)
+  return () => { connectivity.delete(fn) }
+}
+const report = (reachable: boolean) => connectivity.forEach(fn => fn(reachable))
+
 function base(): { url: string; token: string } {
   const p = getPairing()
   if (!p) throw new ApiError('unpaired', 'unpaired', 'Pair this device with your Mac first.', false)
@@ -51,12 +61,15 @@ async function send(method: string, path: string, body?: unknown, timeoutMs = TI
       signal: AbortSignal.timeout(timeoutMs),
     })
   } catch {
+    report(false)
     throw new ApiError('unreachable', 'unreachable',
       "Can't reach your Mac. Check that the Tailscale app is connected, then retry.", true)
   }
-  if (res.ok) return res
+  if (res.ok) { report(true); return res }
   const data: unknown = await res.json().catch(() => null)
-  if (isProxyDown(res.status, data)) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
+  const down = isProxyDown(res.status, data)
+  report(!down)
+  if (down) throw new ApiError('unreachable', 'unreachable', PROXY_DOWN_MESSAGE, true, res.status)
   const err = (data as { error?: { code: string; message: string; retryable: boolean } } | null)?.error
   const kind: ApiErrorKind = res.status === 401 ? 'unauthorized' : 'api'
   throw new ApiError(kind, err?.code ?? 'internal', err?.message ?? `Gateway returned ${res.status}.`,

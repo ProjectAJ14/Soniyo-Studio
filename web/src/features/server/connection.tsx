@@ -1,7 +1,7 @@
 // Polls /health so the whole app knows whether the Mac is online, unreachable or rejecting us.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, KeyRound, RotateCw, WifiOff } from 'lucide-react'
-import { api } from '../../api/client'
+import { api, onConnectivity } from '../../api/client'
 import type { Health } from '../../api/types'
 import { notifyReconnected, toApiError } from '../../lib/async'
 import { forgetPairing } from './pairing'
@@ -24,9 +24,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Omit<Connection, 'retry'>>({ status: 'checking', errorCode: null, health: null, lastChecked: null })
   const run = useRef(0)
   const wasDown = useRef(false)
+  const busy = useRef(false)
 
   const check = useCallback(async () => {
     const id = ++run.current
+    busy.current = true
     let status: ConnectionStatus
     let health: Health | null = null
     let errorCode: string | null = null
@@ -42,6 +44,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       if (status === 'error') errorCode = err.code
     }
     if (id !== run.current) return
+    busy.current = false
     if (status === 'online' && wasDown.current) notifyReconnected()
     wasDown.current = status === 'unreachable'
     setState(s => ({ status, errorCode, health: health ?? s.health, lastChecked: new Date() }))
@@ -51,6 +54,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, status: 'checking' }))
     void check()
   }, [check])
+
+  // Any api call that fails to reach the Mac shows the banner now; the first one that gets
+  // through while down re-checks, so recovery (and notifyReconnected) is immediate too.
+  // Reports from check()'s own requests are ignored while it runs.
+  useEffect(() => onConnectivity(reachable => {
+    if (busy.current || reachable !== wasDown.current) return
+    if (reachable) { void check(); return }
+    wasDown.current = true
+    setState(s => ({ ...s, status: 'unreachable', errorCode: null, lastChecked: new Date() }))
+  }), [check])
 
   useEffect(() => {
     void check()
