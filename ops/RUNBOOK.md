@@ -32,7 +32,8 @@ Layout on the Mac (all created by `install.sh` or the steps below):
 3. **Power and sleep.**
    ```sh
    sudo pmset -a sleep 0 disksleep 0 displaysleep 0
-   sudo pmset -a autorestart 1        # power back on after an outage
+   sudo pmset -a autorestart 1        # power back on after an outage (desktops only: MacBooks
+                                      # lack it, `pmset -g cap` omits it and pmset ignores it)
    pmset -g                           # verify
    ```
    Keep it plugged in, lid open. Only if the lid must close: `sudo pmset -a disablesleep 1`.
