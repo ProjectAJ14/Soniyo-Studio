@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+*.sqlite3
+*.db
+data/
+.DS_Store
+playwright-report/
+test-results/
