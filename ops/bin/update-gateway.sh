@@ -4,11 +4,11 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 env_file=${SONIYO_ENV:-$HOME/AceStudio/config/gateway.env}
-set -a
+# Read only SONIYO_WEB_DIST, in a subshell: the owner token and engine key must never reach
+# npm ci / npm run build (third-party install scripts can read the environment).
 # shellcheck source=/dev/null
-source "$env_file"
-set +a
-dist=${SONIYO_WEB_DIST:?SONIYO_WEB_DIST not set in $env_file}
+dist=$(source "$env_file" && printf '%s' "${SONIYO_WEB_DIST:-}")
+[ -n "$dist" ] || { echo "SONIYO_WEB_DIST not set in $env_file" >&2; exit 1; }
 
 git -C "$repo" pull --ff-only
 (cd "$repo/gateway" && uv sync)

@@ -63,9 +63,10 @@ for name in engine gateway; do
   if [ -f "$dest" ]; then
     echo "install: keeping existing $dest"
   else
-    (umask 077 && sed -e "s|__ENGINE_KEY__|$engine_key|" \
-      -e "s|__OWNER_TOKEN__|$(openssl rand -hex 32)|" \
-      -e "s|__FIREBASE_PROJECT__|$project|g" \
+    # secrets via the environment, not argv, so `ps` never shows them
+    (umask 077 && ENGINE_KEY="$engine_key" OWNER="$(openssl rand -hex 32)" PROJECT="$project" awk '{
+        gsub(/__ENGINE_KEY__/, ENVIRON["ENGINE_KEY"]); gsub(/__OWNER_TOKEN__/, ENVIRON["OWNER"])
+        gsub(/__FIREBASE_PROJECT__/, ENVIRON["PROJECT"]); print }' \
       "$repo/ops/env/$name.env.example" > "$dest")
     echo "install: wrote $dest"
   fi

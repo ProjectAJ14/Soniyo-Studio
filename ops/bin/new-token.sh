@@ -10,7 +10,9 @@ new=$(openssl rand -hex 32)
 set_var() {  # set_var NAME FILE
   [ -f "$2" ] || { echo "missing $2 (run ops/bin/install.sh)" >&2; exit 1; }
   grep -q "^$1=" "$2" || { echo "$1 not found in $2" >&2; exit 1; }
-  sed -i '' "s/^$1=.*/$1=$new/" "$2"
+  # secret via the environment, not argv, so `ps` never shows it
+  (umask 077 && NEW="$new" awk -v k="$1" 'index($0, k "=") == 1 { $0 = k "=" ENVIRON["NEW"] } 1' "$2" > "$2.tmp")
+  mv "$2.tmp" "$2"
   chmod 600 "$2"
 }
 
