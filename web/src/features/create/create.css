@@ -12,9 +12,6 @@
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
 .row--nowrap { flex-wrap: nowrap; }
-.field__help { font-size: 12.5px; color: var(--faint); }
-.field__error { font-size: 12.5px; color: var(--error); }
-.input[aria-invalid='true'] { border-color: var(--error); }
 .input--narrow { width: 110px; flex: none; }
 .textarea--short { min-height: 80px; }
 .lyrics { min-height: 200px; font-size: 16px; }
@@ -23,8 +20,6 @@
 .check input { width: 20px; height: 20px; accent-color: var(--spot); }
 .range { flex: 1; min-height: 44px; accent-color: var(--spot); }
 .btn--block { width: 100%; }
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .ins-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .ins { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) 0; border-top: 1px solid var(--line); background: var(--panel); }

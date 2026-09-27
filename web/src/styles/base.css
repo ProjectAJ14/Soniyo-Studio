@@ -155,3 +155,10 @@ a { color: var(--spot); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Field helpers and busy icon, shared by every form. */
+.field__help { font-size: 12.5px; color: var(--faint); }
+.field__error { font-size: 12.5px; color: var(--error); }
+.input[aria-invalid='true'] { border-color: var(--error); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
