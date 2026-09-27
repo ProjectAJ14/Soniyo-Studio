@@ -24,7 +24,8 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 
 const ENGINE_DOT = { ok: 'dot--ok', down: 'dot--error', unknown: '' } as const
 
-function Status({ health, at }: { health: Health; at: Date }) {
+// `stale`: the latest check failed, so these numbers are from the last good one.
+function Status({ health, at, stale }: { health: Health; at: Date; stale: boolean }) {
   const engine = health.engine
   const disk = health.disk
   return (
@@ -40,7 +41,9 @@ function Status({ health, at }: { health: Health; at: Date }) {
       )}
       <dl className="stats">
         <Stat label="Mac">
-          <span className="row"><span className="dot dot--ok" aria-hidden /> Reachable</span>
+          {stale
+            ? <span className="row"><span className="dot dot--error" aria-hidden /> Not responding</span>
+            : <span className="row"><span className="dot dot--ok" aria-hidden /> Reachable</span>}
         </Stat>
         <Stat label="Engine">
           <span className="row">
@@ -66,7 +69,7 @@ function Status({ health, at }: { health: Health; at: Date }) {
         </Stat>
         <Stat label="Library size">{formatBytes(disk?.used_by_library_bytes)}</Stat>
         <Stat label="Gateway version"><span className="mono">{health.version}</span></Stat>
-        <Stat label="Last checked">{at.toLocaleTimeString()}</Stat>
+        <Stat label={stale ? 'Last reachable' : 'Last checked'}>{at.toLocaleTimeString()}</Stat>
       </dl>
     </div>
   )
@@ -100,7 +103,7 @@ export function ServerScreen() {
           <h2 id="server-status">Mac and engine</h2>
         </div>
         <AsyncView state={status} onRetry={reload} label="server status">
-          {d => <Status health={d.health} at={d.at} />}
+          {d => <Status health={d.health} at={d.at} stale={status.status === 'error'} />}
         </AsyncView>
       </section>
 

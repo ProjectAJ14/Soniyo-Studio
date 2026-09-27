@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { KeyRound, RotateCw, WifiOff } from 'lucide-react'
 import { api } from '../../api/client'
 import type { Health } from '../../api/types'
-import { toApiError } from '../../lib/async'
+import { notifyReconnected, toApiError } from '../../lib/async'
 import { forgetPairing } from './pairing'
 
 export type ConnectionStatus = 'checking' | 'online' | 'unreachable' | 'unauthorized'
@@ -21,6 +21,7 @@ const Ctx = createContext<Connection | null>(null)
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Omit<Connection, 'retry'>>({ status: 'checking', health: null, lastChecked: null })
   const run = useRef(0)
+  const wasDown = useRef(false)
 
   const check = useCallback(async () => {
     const id = ++run.current
@@ -36,6 +37,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       status = toApiError(e).kind === 'unauthorized' ? 'unauthorized' : 'unreachable'
     }
     if (id !== run.current) return
+    if (status === 'online' && wasDown.current) notifyReconnected()
+    wasDown.current = status === 'unreachable'
     setState(s => ({ status, health: health ?? s.health, lastChecked: new Date() }))
   }, [])
 

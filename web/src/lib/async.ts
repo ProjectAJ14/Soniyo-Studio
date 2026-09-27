@@ -10,6 +10,10 @@ export type AsyncState<T> =
 
 export const idle = { status: 'idle' } as const
 
+const RECONNECTED = 'soniyo:reconnected'
+/** Called when the Mac answers again: every view stuck on an unreachable error refetches. */
+export function notifyReconnected(): void { dispatchEvent(new Event(RECONNECTED)) }
+
 export function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e
   return new ApiError('api', 'internal', e instanceof Error ? e.message : 'Something went wrong.', true)
@@ -44,6 +48,16 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): [AsyncState<
 
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- caller owns deps, like useEffect
   useEffect(load, deps)
+  const stateRef = useRef(state)
+  useLayoutEffect(() => { stateRef.current = state })
+  useEffect(() => {
+    const onReconnect = () => {
+      const s = stateRef.current
+      if (s.status === 'error' && s.error.kind === 'unreachable') load()
+    }
+    addEventListener(RECONNECTED, onReconnect)
+    return () => removeEventListener(RECONNECTED, onReconnect)
+  }, [load])
   const set = useCallback((data: T) => setState({ status: 'success', data }), [])
   return [state, load, set]
 }
